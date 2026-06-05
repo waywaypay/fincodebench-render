@@ -169,6 +169,38 @@ def health():
     return {"status": "ok", "timestamp": datetime.utcnow().isoformat()}
 
 
+@app.get("/auth/check", include_in_schema=False)
+def auth_check(
+    key: Optional[str] = Query(default=None),
+    x_api_key: Optional[str] = Header(default=None),
+):
+    """
+    Temporary diagnostic for the "Invalid API key" error. It NEVER returns the
+    key values themselves — only lengths and booleans — so it is safe to call.
+    Accepts the key via the X-API-Key header or a ?key= query param so you can
+    test straight from a browser URL. Remove once the key problem is resolved.
+
+    Reading the result:
+      * 404                          -> this build isn't deployed yet
+      * match=true                   -> keys match; any 401 is a stale/old deploy
+      * match=false, lengths_match=false -> different length: the Render value has
+                                        extra chars (often wrapping quotes/space)
+                                        or is simply a different key
+      * match=false, lengths_match=true  -> same length, different content: a typo
+                                        or a genuinely different key
+    """
+    provided = ((key if key is not None else x_api_key) or "").strip()
+    return {
+        "server_key_configured": bool(API_KEY),
+        "provided_key_present": (key is not None) or (x_api_key is not None),
+        "provided_key_length": len(provided),
+        "lengths_match": len(provided) == len(API_KEY),
+        "match": bool(API_KEY) and secrets.compare_digest(
+            provided.encode("utf-8"), API_KEY.encode("utf-8")
+        ),
+    }
+
+
 # ── Dashboard (public, read-only) ─────────────────────────────────────────────
 @app.get("/", include_in_schema=False)
 def dashboard_index():
