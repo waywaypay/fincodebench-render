@@ -27,6 +27,9 @@ class FakeClient:
             )
         return providers.ChatResponse("```python\ndef f():\n    return 1\n```", [], "end_turn")
 
+    def list_models(self):
+        return ["model-a", "model-b"]
+
 
 @pytest.fixture
 def client(monkeypatch):
@@ -46,6 +49,39 @@ def test_dashboard_data_includes_providers(client):
     d = client.get("/dashboard/data").json()
     assert "providers" in d and len(d["providers"]) == 7
     assert "tasks" in d and "runs" in d
+
+
+def test_provider_models_live(client):
+    r = client.get("/providers/openai/models", headers={"X-Provider-Api-Key": "k"})
+    assert r.status_code == 200
+    d = r.json()
+    assert d["provider"] == "openai" and d["source"] == "live"
+    assert d["models"] == ["model-a", "model-b"]
+
+
+def test_provider_models_requires_key(client):
+    r = client.get("/providers/openai/models")
+    assert r.status_code == 401
+
+
+def test_provider_models_unknown_provider(client):
+    r = client.get("/providers/bogus/models", headers={"X-Provider-Api-Key": "k"})
+    assert r.status_code == 400
+
+
+def test_provider_models_falls_back_to_static_on_error(monkeypatch):
+    class Boom(FakeClient):
+        def list_models(self):
+            raise RuntimeError("provider unreachable")
+
+    monkeypatch.setattr(providers, "ChatClient", Boom)
+    c = TestClient(api.app)
+    r = c.get("/providers/venice/models", headers={"X-Provider-Api-Key": "k"})
+    assert r.status_code == 200
+    d = r.json()
+    assert d["source"] == "static"
+    assert d["models"] == providers.PROVIDERS["venice"]["models"]
+    assert "error" in d
 
 
 def test_missing_key_returns_401_with_provider_hint(client):
