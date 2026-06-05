@@ -168,7 +168,12 @@ def generate_report(results: list, tasks: dict) -> dict:
             "cost": task_cost,
             "model": model,
             "tokens": result.get("usage"),
-            "reasoning": sr.get("reasoning") if method == "llm_judge" else None
+            "reasoning": sr.get("reasoning") if method == "llm_judge" else None,
+            # The agent's final answer, surfaced so the dashboard can show what the
+            # model actually produced for each task next to its score. This is the
+            # final response only — full trajectories stay behind the keyed endpoint.
+            "output": result.get("final_response"),
+            "error": result.get("error"),
         })
 
     def avg(lst): return round(sum(lst) / len(lst), 4) if lst else None
