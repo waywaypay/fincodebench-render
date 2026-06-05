@@ -12,6 +12,7 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, BackgroundTasks, HTTPException, Header, Query
 from fastapi.responses import JSONResponse, FileResponse
@@ -71,6 +72,7 @@ def _run_entry_from_report(run_id: str, report: dict) -> dict:
         "n_tasks": report.get("n_tasks"),
         "mean_score": overall.get("mean_score"),
         "pass_rate": overall.get("pass_rate_75"),
+        "provider": report.get("provider"),
         "model": report.get("model"),
         "judge_model": report.get("judge_model"),
         "cost_usd": (report.get("cost_usd") or {}).get("total"),
@@ -100,12 +102,18 @@ def _heal_registry(reg: dict) -> dict:
             continue
         entry = _run_entry_from_report(run_id, report)
         if existing:
-            # keep the queue metadata the index already had
-            entry["created_at"] = existing.get("created_at") or entry["created_at"]
-            for k in ("task_ids", "categories", "started_at"):
-                if existing.get(k) is not None:
-                    entry[k] = existing[k]
-            entry.pop("recovered", None)
+            # Promote in place: keep everything the index already had (provider,
+            # model/judge_model overrides, task_ids, categories, queue time, …)
+            # and overlay only the non-null report-derived fields. Overlaying
+            # blindly would drop create-time metadata the report doesn't carry.
+            merged = dict(existing)
+            for k, v in entry.items():
+                if v is not None:
+                    merged[k] = v
+            merged["status"] = "completed"
+            merged["created_at"] = existing.get("created_at") or merged.get("created_at", "")
+            merged.pop("recovered", None)  # was tracked all along, not recovered
+            entry = merged
         reg[run_id] = entry
     return reg
 
@@ -255,14 +263,6 @@ def _execute_run(run_id: str, task_ids: Optional[list], categories: Optional[lis
 
 
 # ── FastAPI app ───────────────────────────────────────────────────────────────
-app = FastAPI(
-    title="FinCodeBench",
-    description="Financial coding agent eval suite — benchmark Claude Code on financial tasks",
-    version="1.0.0"
-)
-
-
-@app.on_event("startup")
 def _startup_repair_and_warn():
     """Repair the run index from disk on boot, and flag ephemeral storage —
     the usual reason runs 'disappear' after a redeploy."""
@@ -279,6 +279,20 @@ def _startup_repair_and_warn():
             _save_registry(_load_registry())  # persist any runs recovered from disk
     except Exception as e:
         print(f"Registry self-heal at startup failed (non-fatal): {e}")
+
+
+@asynccontextmanager
+async def _lifespan(app):
+    _startup_repair_and_warn()
+    yield
+
+
+app = FastAPI(
+    title="FinCodeBench",
+    description="Financial coding agent eval suite — benchmark Claude Code on financial tasks",
+    version="1.0.0",
+    lifespan=_lifespan,
+)
 
 
 # ── Request/response models ───────────────────────────────────────────────────
