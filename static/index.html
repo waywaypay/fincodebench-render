@@ -360,7 +360,7 @@
     <label>All runs</label>
     <button class="btn ghost" id="refreshRuns">Refresh</button>
   </div>
-  <p class="note" style="margin:0 0 4px">Each run shows its model, cost, and latency. Click a completed run to drill into its per-task results.</p>
+  <p class="note" style="margin:0 0 4px">Each run shows its model, cost, and latency. Click a completed run to drill into its per-task results. Completed runs are also cached in this browser (<span class="muted">💾 local</span>), so they stay visible even if the server is restarted.</p>
   <div id="runsTableWrap"></div>
   <div id="resultsBody"></div>
 
@@ -436,7 +436,7 @@ document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
 async function init(){
   try{
     const d = await (await fetch('dashboard/data')).json();
-    STATE.tasks = d.tasks||[]; STATE.runs = d.runs||[]; STATE.providers = d.providers||[];
+    STATE.tasks = d.tasks||[]; STATE.providers = d.providers||[]; setRuns(d.runs);
     renderOverview(); renderTasks(); renderProviders(); renderRunsTable();
   }catch(e){ $('#resultsBody').innerHTML='<div class="empty">Failed to load data: '+esc(e.message)+'</div>'; }
 }
@@ -554,6 +554,43 @@ function statusBadge(r){
   }
   return `<span class="badge st-${esc(s)}">${esc(label)}</span>`;
 }
+
+// ---------- local run cache (survives server restarts / ephemeral storage) ----
+// Completed runs are mirrored into this browser's localStorage, so they keep
+// showing in the table — and stay drillable — even if the server's storage is
+// ephemeral and forgets them after a redeploy. Keyed by run_id, capped to 30.
+const LS_KEY='fcb_runs_v1';
+function lcRead(){ try{ return JSON.parse(localStorage.getItem(LS_KEY)||'{}'); }catch{ return {}; } }
+function lcWrite(map){
+  try{
+    const top=Object.entries(map)
+      .sort((a,b)=>String((b[1].run||{}).created_at||'').localeCompare(String((a[1].run||{}).created_at||'')))
+      .slice(0,30);
+    localStorage.setItem(LS_KEY, JSON.stringify(Object.fromEntries(top)));
+  }catch(e){}
+}
+function lcSaveRun(run,report){
+  if(!run||!run.run_id||run.status!=='completed') return;
+  const map=lcRead(); const prev=map[run.run_id]||{};
+  const meta={...run}; delete meta._local;     // don't persist the UI-only flag
+  map[run.run_id]={run:meta, report:report||prev.report||null};
+  lcWrite(map);
+}
+function lcReport(id){ const e=lcRead()[id]; return e?e.report:null; }
+function lcRuns(){ return Object.values(lcRead()).map(e=>e.run).filter(Boolean); }
+
+// Merge server runs with the local cache. Server wins on duplicates; runs that
+// exist only in this browser (server forgot them) are flagged so the table can
+// show where they came from.
+function setRuns(serverRuns){
+  serverRuns=(serverRuns||[]).slice();
+  serverRuns.forEach(r=>lcSaveRun(r,null));     // mirror completed server runs
+  const seen=new Set(serverRuns.map(r=>r.run_id));
+  const localOnly=lcRuns().filter(r=>!seen.has(r.run_id)).map(r=>({...r,_local:true}));
+  STATE.runs=serverRuns.concat(localOnly)
+    .sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||'')));
+}
+
 function renderRunsTable(){
   const wrap=$('#runsTableWrap');
   const runs=STATE.runs.slice();
@@ -581,7 +618,7 @@ function renderRunsTable(){
       `<td><div class="run-when">${esc(fmtWhen(r.created_at))}</div>
            <div class="run-id mono">${esc(r.run_id.slice(0,15))}</div></td>
        <td class="mono small">${esc(r.model||'—')}</td>
-       <td>${statusBadge(r)}${r.recovered?' <span class="muted" style="font-size:11px;white-space:nowrap" title="Reconstructed from run files on disk — was missing from the registry">↻ recovered</span>':''}</td>
+       <td>${statusBadge(r)}${r.recovered?' <span class="muted" style="font-size:11px;white-space:nowrap" title="Reconstructed from run files on disk — was missing from the registry">↻ recovered</span>':''}${r._local?' <span class="muted" style="font-size:11px;white-space:nowrap" title="Saved in this browser — the server no longer has this run (likely ephemeral storage). Attach a persistent disk at /data for shared, server-side history.">💾 local</span>':''}</td>
        <td>${r.n_tasks??'—'}</td>
        <td>${r.mean_score!=null?pct(r.mean_score):'—'}</td>
        <td>${r.pass_rate!=null?pct(r.pass_rate):'—'}</td>
@@ -612,14 +649,23 @@ function highlightRow(id){
     tr.classList.toggle('active', tr.dataset.runId===id));
 }
 $('#refreshRuns').onclick=async()=>{
-  const d=await (await fetch('dashboard/data')).json(); STATE.runs=d.runs||[]; renderRunsTable();
+  const d=await (await fetch('dashboard/data')).json(); setRuns(d.runs); renderRunsTable();
 };
 async function loadRun(id){
   const body=$('#resultsBody'); body.innerHTML='<div class="empty">Loading…</div>';
+  let rep=null;
   try{
-    const rep=await (await fetch('dashboard/runs/'+encodeURIComponent(id))).json();
-    renderReport(rep);
-  }catch(e){ body.innerHTML='<div class="empty">Could not load run: '+esc(e.message)+'</div>'; }
+    const res=await fetch('dashboard/runs/'+encodeURIComponent(id));
+    if(res.ok) rep=await res.json();
+  }catch(e){}
+  if(rep && !rep.detail){
+    const run=STATE.runs.find(x=>x.run_id===id); if(run) lcSaveRun(run, rep);  // cache full report
+    renderReport(rep); return;
+  }
+  // Server forgot this run (ephemeral storage) — fall back to the browser cache.
+  const local=lcReport(id);
+  if(local){ renderReport(local); return; }
+  body.innerHTML='<div class="empty">Could not load run details.</div>';
 }
 function renderReport(rep){
   const body=$('#resultsBody'); body.innerHTML='';
@@ -720,7 +766,7 @@ async function poll(id,st,btn){
   for(let i=0;i<600;i++){
     await new Promise(r=>setTimeout(r,3000));
     let d; try{ d=await (await fetch('dashboard/data')).json(); }catch{ continue; }
-    STATE.runs=d.runs||[];
+    setRuns(d.runs);
     renderRunsTable();
     const r=STATE.runs.find(x=>x.run_id===id);
     if(!r){st.textContent='Run not found.';break;}
