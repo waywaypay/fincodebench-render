@@ -30,8 +30,8 @@ PROVIDERS = {
         "key_env": "ANTHROPIC_API_KEY",
         "key_hint": "sk-ant-…",
         "default_model": "claude-haiku-4-5",
-        "default_judge_model": "claude-sonnet-4-5",
-        "models": ["claude-opus-4-5", "claude-sonnet-4-5", "claude-haiku-4-5"],
+        "default_judge_model": "claude-sonnet-4-6",
+        "models": ["claude-opus-4-8", "claude-opus-4-7", "claude-sonnet-4-6", "claude-haiku-4-5"],
         "docs": "https://console.anthropic.com/settings/keys",
     },
     "openai": {
@@ -110,8 +110,19 @@ PROVIDERS = {
         "key_env": "VENICE_API_KEY",
         "key_hint": "your Venice API key",
         "default_model": "llama-3.3-70b",
-        "default_judge_model": "llama-3.3-70b",
-        "models": ["llama-3.3-70b", "qwen3-235b", "mistral-31-24b", "llama-3.1-405b"],
+        "default_judge_model": "llama-3.1-405b",
+        # Venice's catalogue is large and changes often — these are common
+        # starting points; the dashboard fetches the full live list from the key.
+        "models": [
+            "llama-3.3-70b",
+            "llama-3.1-405b",
+            "qwen3-235b",
+            "qwen3-4b",
+            "qwen-2.5-qwq-32b",
+            "mistral-31-24b",
+            "deepseek-r1-671b",
+            "venice-uncensored",
+        ],
         "docs": "https://venice.ai/settings/api",
     },
 }
@@ -229,6 +240,24 @@ class ChatClient:
         if self.kind == "anthropic":
             return self._create_anthropic(model, max_tokens, messages, tools, system)
         return self._create_openai(model, max_tokens, messages, tools, system)
+
+    def list_models(self):
+        """Live list of model ids the caller's key can use, sorted. Both the
+        Anthropic and OpenAI SDKs expose client.models.list() with `.id` on each
+        item. Raises on auth/network errors so callers can fall back to the
+        static `models` suggestions in the registry."""
+        resp = self._client.models.list()
+        items = getattr(resp, "data", None)
+        if items is None:
+            items = list(resp)  # both SDKs' page objects are iterable
+        ids = []
+        for m in items:
+            mid = getattr(m, "id", None)
+            if mid is None and isinstance(m, dict):
+                mid = m.get("id")
+            if mid:
+                ids.append(mid)
+        return sorted(ids)
 
     # -- Anthropic path --
     def _create_anthropic(self, model, max_tokens, messages, tools, system):

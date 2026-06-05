@@ -326,6 +326,38 @@ def list_providers():
     return {"providers": providers.public_registry()}
 
 
+@app.get("/providers/{provider}/models")
+def list_provider_models(
+    provider: str,
+    x_provider_api_key: Optional[str] = Header(default=None),
+    x_anthropic_api_key: Optional[str] = Header(default=None),
+):
+    """Live model catalogue for a provider, fetched from its /models endpoint
+    using the caller's own key (bring-your-own-key). The key is used only for
+    this lookup and never stored. Falls back to the registry's static
+    suggestions if the provider's listing can't be reached."""
+    try:
+        name, cfg = providers.resolve_provider(provider)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    api_key = (x_provider_api_key or x_anthropic_api_key or "").strip()
+    if not api_key:
+        raise HTTPException(
+            status_code=401,
+            detail=f"Send your {cfg['label']} API key in the X-Provider-Api-Key "
+                   f"header to list its models.",
+        )
+
+    try:
+        models = providers.ChatClient(name, api_key).list_models()
+        return {"provider": name, "models": models, "source": "live"}
+    except Exception as e:
+        # Degrade gracefully — the dashboard still has the static suggestions.
+        return {"provider": name, "models": cfg["models"], "source": "static",
+                "error": str(e)}
+
+
 # ── Dashboard (public, read-only) ─────────────────────────────────────────────
 @app.get("/", include_in_schema=False)
 def dashboard_index():
