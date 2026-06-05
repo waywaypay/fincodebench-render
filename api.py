@@ -162,6 +162,12 @@ def _execute_run(run_id: str, task_ids: Optional[list], categories: Optional[lis
             reg[run_id]["n_tasks"] = report.get("n_tasks", 0)
             reg[run_id]["mean_score"] = report.get("overall", {}).get("mean_score")
             reg[run_id]["pass_rate"] = report.get("overall", {}).get("pass_rate_75")
+            # Top-line model / cost / latency so the runs table can show them
+            # without loading each run's full report.
+            reg[run_id]["model"] = report.get("model")
+            reg[run_id]["judge_model"] = report.get("judge_model")
+            reg[run_id]["cost_usd"] = (report.get("cost_usd") or {}).get("total")
+            reg[run_id]["elapsed_seconds"] = (report.get("latency_seconds") or {}).get("total")
             _save_registry(reg)
 
     except Exception as e:
@@ -424,10 +430,16 @@ def get_run_results(run_id: str, x_api_key: Optional[str] = Header(default=None)
         "task_results": [
             {
                 "task_id": r["task_id"],
+                "model": r.get("model"),
                 "category": r.get("category"),
                 "difficulty": r.get("difficulty"),
                 "turns": r.get("turns"),
                 "elapsed_seconds": r.get("elapsed_seconds"),
+                "cost_usd": round((r.get("cost_usd") or 0.0)
+                                  + (r.get("score_result", {}).get("judge_cost_usd") or 0.0), 6)
+                            if (r.get("cost_usd") is not None
+                                or r.get("score_result", {}).get("judge_cost_usd") is not None)
+                            else None,
                 "score": r.get("score_result", {}).get("score"),
                 "method": r.get("score_result", {}).get("method"),
                 "reasoning": r.get("score_result", {}).get("reasoning"),

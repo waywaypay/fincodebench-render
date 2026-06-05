@@ -135,6 +135,37 @@ def test_anthropic_tool_loop_translation():
     assert tr["type"] == "tool_result" and tr["tool_use_id"] == "toolu_1" and tr["content"] == "4"
 
 
+def test_usage_is_carried_and_mapped():
+    # Anthropic: native usage fields pass through unchanged
+    c = providers.ChatClient("anthropic", "k")
+    c._client = SimpleNamespace(messages=SimpleNamespace(create=lambda **k: SimpleNamespace(
+        content=[SimpleNamespace(type="text", text="hi")], stop_reason="end_turn",
+        usage=SimpleNamespace(input_tokens=1000, output_tokens=200,
+                              cache_creation_input_tokens=5, cache_read_input_tokens=7))))
+    r = c.create("claude-haiku-4-5", 100, [{"role": "user", "content": "x"}])
+    assert (r.usage.input_tokens, r.usage.output_tokens) == (1000, 200)
+    assert r.usage.cache_creation_input_tokens == 5 and r.usage.cache_read_input_tokens == 7
+
+    # OpenAI: prompt/completion → input/output, cached → cache_read
+    c2 = providers.ChatClient("openai", "k")
+    c2._client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(
+        create=lambda **k: SimpleNamespace(choices=[SimpleNamespace(
+            message=SimpleNamespace(content="hi", tool_calls=None), finish_reason="stop")],
+            usage=SimpleNamespace(prompt_tokens=500, completion_tokens=50,
+                                  prompt_tokens_details=SimpleNamespace(cached_tokens=100))))))
+    r2 = c2.create("gpt-4o-mini", 100, [{"role": "user", "content": "x"}])
+    assert (r2.usage.input_tokens, r2.usage.output_tokens) == (500, 50)
+    assert r2.usage.cache_read_input_tokens == 100
+
+    # Missing usage → zeros, never raises (keeps cost reporting graceful)
+    c3 = providers.ChatClient("openai", "k")
+    c3._client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(
+        create=lambda **k: SimpleNamespace(choices=[SimpleNamespace(
+            message=SimpleNamespace(content="hi", tool_calls=None), finish_reason="stop")], usage=None))))
+    r3 = c3.create("gpt-4o-mini", 100, [{"role": "user", "content": "x"}])
+    assert r3.usage.input_tokens == 0 and r3.usage.output_tokens == 0
+
+
 def test_anthropic_system_passthrough():
     captured = []
 

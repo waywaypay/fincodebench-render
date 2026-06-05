@@ -14,6 +14,8 @@ from typing import Optional, Callable
 
 import providers
 
+from pricing import compute_cost
+
 # ── Config ──────────────────────────────────────────────────────────────────
 # Provider + model are configurable via env (FINCODEBENCH_PROVIDER /
 # FINCODEBENCH_MODEL). MODEL defaults to the selected provider's default model.
@@ -110,6 +112,8 @@ def run_task(task: dict, verbose: bool = True) -> dict:
     max_turns = task.get("max_turns", 8)
 
     start_time = time.time()
+    usage = {"input_tokens": 0, "output_tokens": 0,
+             "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0}
 
     for turn in range(1, max_turns + 1):
         try:
@@ -124,6 +128,12 @@ def run_task(task: dict, verbose: bool = True) -> dict:
             if verbose:
                 print(f"  [API ERROR turn {turn}] {e}")
             break
+
+        # Accumulate token usage across turns for cost reporting
+        u = getattr(response, "usage", None)
+        if u is not None:
+            for k in usage:
+                usage[k] += getattr(u, k, 0) or 0
 
         # Record this turn (one text block, then any tool_use blocks)
         traj_entry = {
@@ -193,9 +203,15 @@ def run_task(task: dict, verbose: bool = True) -> dict:
             messages.append({"role": "tool", "results": tool_results})
 
     elapsed = time.time() - start_time
+    cost_usd = compute_cost(
+        MODEL,
+        usage["input_tokens"], usage["output_tokens"],
+        usage["cache_creation_input_tokens"], usage["cache_read_input_tokens"],
+    )
 
     return {
         "task_id": task_id,
+        "model": MODEL,
         "category": task["category"],
         "difficulty": task["difficulty"],
         "scoring_type": task["scoring_type"],
@@ -203,9 +219,10 @@ def run_task(task: dict, verbose: bool = True) -> dict:
         "trajectory": trajectory,
         "turns": len(trajectory),
         "elapsed_seconds": round(elapsed, 2),
+        "usage": usage,
+        "cost_usd": cost_usd,
         "error": error,
         "provider": PROVIDER,
-        "model": MODEL,
         "timestamp": datetime.utcnow().isoformat()
     }
 

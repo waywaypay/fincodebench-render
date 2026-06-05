@@ -154,11 +154,48 @@ def public_registry():
 
 # ── Unified response ──────────────────────────────────────────────────────────
 @dataclass
+class Usage:
+    """Token counts in Anthropic's shape, so pricing.compute_cost and the
+    runner/judge usage accumulators work the same across providers."""
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cache_creation_input_tokens: int = 0
+    cache_read_input_tokens: int = 0
+
+
+@dataclass
 class ChatResponse:
     """Provider-agnostic result of one model turn."""
     text: str                       # concatenated assistant text
     tool_calls: list = field(default_factory=list)  # [{"id","name","input"}]
     stop_reason: str = "end_turn"   # "end_turn" | "tool_use"
+    usage: Usage = field(default_factory=Usage)
+
+
+def _anthropic_usage(resp):
+    u = getattr(resp, "usage", None)
+    if u is None:
+        return Usage()
+    return Usage(
+        input_tokens=getattr(u, "input_tokens", 0) or 0,
+        output_tokens=getattr(u, "output_tokens", 0) or 0,
+        cache_creation_input_tokens=getattr(u, "cache_creation_input_tokens", 0) or 0,
+        cache_read_input_tokens=getattr(u, "cache_read_input_tokens", 0) or 0,
+    )
+
+
+def _openai_usage(resp):
+    # OpenAI-style: prompt/completion tokens, with cached reads nested under
+    # prompt_tokens_details. No cache-creation concept.
+    u = getattr(resp, "usage", None)
+    if u is None:
+        return Usage()
+    details = getattr(u, "prompt_tokens_details", None)
+    return Usage(
+        input_tokens=getattr(u, "prompt_tokens", 0) or 0,
+        output_tokens=getattr(u, "completion_tokens", 0) or 0,
+        cache_read_input_tokens=getattr(details, "cached_tokens", 0) or 0 if details else 0,
+    )
 
 
 # ── Unified client ────────────────────────────────────────────────────────────
@@ -230,7 +267,7 @@ class ChatClient:
             elif block.type == "tool_use":
                 tool_calls.append({"id": block.id, "name": block.name, "input": block.input})
         stop = "tool_use" if resp.stop_reason == "tool_use" else "end_turn"
-        return ChatResponse("\n".join(text_parts), tool_calls, stop)
+        return ChatResponse("\n".join(text_parts), tool_calls, stop, _anthropic_usage(resp))
 
     # -- OpenAI-compatible path --
     @staticmethod
@@ -304,7 +341,7 @@ class ChatClient:
                 args = {}
             tool_calls.append({"id": tc.id, "name": tc.function.name, "input": args})
         stop = "tool_use" if tool_calls else "end_turn"
-        return ChatResponse(msg.content or "", tool_calls, stop)
+        return ChatResponse(msg.content or "", tool_calls, stop, _openai_usage(resp))
 
 
 def client_from_env(provider=None):
