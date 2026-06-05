@@ -552,7 +552,7 @@ function renderRunsTable(){
       `<td><div class="run-when">${esc(fmtWhen(r.created_at))}</div>
            <div class="run-id mono">${esc(r.run_id.slice(0,15))}</div></td>
        <td class="mono small">${esc(r.model||'—')}</td>
-       <td>${statusBadge(r)}</td>
+       <td>${statusBadge(r)}${r.recovered?' <span class="muted" style="font-size:11px;white-space:nowrap" title="Reconstructed from run files on disk — was missing from the registry">↻ recovered</span>':''}</td>
        <td>${r.n_tasks??'—'}</td>
        <td>${r.mean_score!=null?pct(r.mean_score):'—'}</td>
        <td>${r.pass_rate!=null?pct(r.pass_rate):'—'}</td>
