@@ -38,10 +38,13 @@ git clone https://github.com/yourname/fincodebench
 cd fincodebench
 
 # 2. Install dependencies
-pip install anthropic
+pip install -r requirements.txt
 
-# 3. Set API key
-export ANTHROPIC_API_KEY=sk-ant-...
+# 3. Set an API key for your provider of choice
+export ANTHROPIC_API_KEY=sk-ant-...      # default provider
+# or, for another provider:
+# export FINCODEBENCH_PROVIDER=openai
+# export OPENAI_API_KEY=sk-...
 
 # 4. Create results directory
 mkdir -p results/raw
@@ -121,7 +124,8 @@ fincodebench/
 ├── tasks/
 │   └── tasks.json          # 30 task definitions with embedded context data
 ├── harness/
-│   ├── runner.py           # Executes Claude on each task, captures trajectory
+│   ├── providers.py        # Provider registry + unified Anthropic/OpenAI chat client
+│   ├── runner.py           # Executes the model on each task, captures trajectory
 │   ├── scorer.py           # Deterministic scoring (exact, fuzzy, functional)
 │   ├── judge.py            # LLM-as-judge for complex/agentic tasks
 │   ├── trajectory.py       # Trajectory analysis and failure classification
@@ -188,15 +192,53 @@ Edit `tasks/tasks.json`. Follow the schema:
 ### Add new scoring methods
 Implement a function in `scorer.py` and add a branch to `score_task()`.
 
-### Run against a different model
-Change `MODEL` in `runner.py`. Re-run. Compare reports.
-Comparing Claude models (opus vs sonnet vs haiku) on the same suite is a useful exercise.
+### Run against a different model or provider
+The runner and judge talk to any supported provider through one interface
+(`harness/providers.py`). Anthropic uses its native SDK; every other provider
+speaks the OpenAI-compatible chat-completions API.
+
+**Supported providers:** `anthropic` (default), `openai`, `openrouter`,
+`deepseek`, `qwen`, `kimi`, `venice`.
+
+From the CLI, select a provider and model via environment variables:
+
+```bash
+export FINCODEBENCH_PROVIDER=openai      # default: anthropic
+export OPENAI_API_KEY=sk-...             # each provider reads its own key env var
+export FINCODEBENCH_MODEL=gpt-4o-mini    # optional — defaults to the provider's default
+export FINCODEBENCH_JUDGE_MODEL=gpt-4o   # optional — defaults to the provider's default
+python eval.py
+```
+
+Per-provider key env vars: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`,
+`OPENROUTER_API_KEY`, `DEEPSEEK_API_KEY`, `DASHSCOPE_API_KEY` (Qwen),
+`MOONSHOT_API_KEY` (Kimi), `VENICE_API_KEY`.
+
+From the **web dashboard / API**, runs are bring-your-own-key: choose a provider,
+optionally a model, and paste your key. It is sent only with your run request
+(header `X-Provider-Api-Key`), billed to your account, and never stored. Adding a
+new OpenAI-compatible provider is a single entry in `PROVIDERS` — no other code
+changes. Comparing models across providers on the same suite is a useful exercise.
+
+```bash
+# Trigger a run on any provider via the API
+curl -X POST <url>/runs \
+  -H 'Content-Type: application/json' \
+  -H 'X-Provider-Api-Key: <your-key>' \
+  -d '{"provider":"deepseek","model":"deepseek-chat","categories":["computation"]}'
+
+# Discover supported providers, key hints, and default models
+curl <url>/providers
+```
 
 ---
 
 ## Dependencies
 
-- `anthropic` — Claude API SDK
+- `anthropic` — Claude API SDK (Anthropic provider)
+- `openai` — OpenAI SDK, also used for every OpenAI-compatible provider
+  (OpenAI, OpenRouter, DeepSeek, Qwen, Kimi, Venice) via a custom base URL
+- `fastapi` + `uvicorn` — the web service
 - `python3` in PATH — for functional test execution
 - Standard library only otherwise (json, subprocess, re, pathlib)
 

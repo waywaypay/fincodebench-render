@@ -87,6 +87,7 @@ def run_full_eval(
 
 def generate_report(results: list, tasks: dict) -> dict:
     """Aggregate scores into summary statistics."""
+    import runner  # read the (possibly per-run overridden) provider/model
 
     by_category = {}
     by_difficulty = {}
@@ -138,7 +139,9 @@ def generate_report(results: list, tasks: dict) -> dict:
     def pass_rate(lst, threshold=0.75): return round(sum(1 for x in lst if x >= threshold) / len(lst), 4) if lst else None
 
     return {
-        "model": "see runner.py MODEL",
+        "model": runner.MODEL,
+        "provider": runner.PROVIDER,
+        "judge_model": __import__("judge").JUDGE_MODEL,
         "timestamp": datetime.utcnow().isoformat(),
         "n_tasks": len(results),
         "overall": {

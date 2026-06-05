@@ -11,18 +11,22 @@ import time
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Callable
-import anthropic
+
+import providers
 
 # ── Config ──────────────────────────────────────────────────────────────────
-MODEL = os.environ.get("FINCODEBENCH_MODEL", "claude-haiku-4-5")  # override via FINCODEBENCH_MODEL
+# Provider + model are configurable via env (FINCODEBENCH_PROVIDER /
+# FINCODEBENCH_MODEL). MODEL defaults to the selected provider's default model.
+PROVIDER, _PROVIDER_CFG = providers.resolve_provider(os.environ.get("FINCODEBENCH_PROVIDER"))
+MODEL = os.environ.get("FINCODEBENCH_MODEL") or _PROVIDER_CFG["default_model"]
 MAX_TOKENS = 4096
 RESULTS_DIR = Path("results")
 TASKS_FILE = Path("tasks/tasks.json")
 
-# Built from ANTHROPIC_API_KEY for direct CLI use. The web service overrides this
-# per run with the caller's own key (bring-your-own-key), so a missing env key
-# must not break import — fall back to a placeholder that gets replaced.
-client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY") or "placeholder")
+# Built from the provider's key env var for direct CLI use. The web service
+# overrides this per run with the caller's own key (bring-your-own-key), so a
+# missing env key must not break import — providers falls back to a placeholder.
+client = providers.client_from_env(PROVIDER)
 
 
 # ── Tool definitions ─────────────────────────────────────────────────────────
@@ -98,6 +102,7 @@ def run_task(task: dict, verbose: bool = True) -> dict:
     if task.get("context"):
         prompt = f"**Context / Data:**\n```\n{task['context']}\n```\n\n**Task:**\n{prompt}"
 
+    # Neutral message history (provider-agnostic — see providers.ChatClient)
     messages = [{"role": "user", "content": prompt}]
     trajectory = []
     final_response = ""
@@ -108,7 +113,7 @@ def run_task(task: dict, verbose: bool = True) -> dict:
 
     for turn in range(1, max_turns + 1):
         try:
-            response = client.messages.create(
+            response = client.create(
                 model=MODEL,
                 max_tokens=MAX_TOKENS,
                 tools=TOOLS,
@@ -120,59 +125,48 @@ def run_task(task: dict, verbose: bool = True) -> dict:
                 print(f"  [API ERROR turn {turn}] {e}")
             break
 
-        # Parse response content
+        # Record this turn (one text block, then any tool_use blocks)
         traj_entry = {
             "turn": turn,
             "stop_reason": response.stop_reason,
             "blocks": []
         }
-
-        tool_calls = []
-        text_blocks = []
-
-        for block in response.content:
-            if block.type == "text":
-                text_blocks.append(block.text)
-                traj_entry["blocks"].append({
-                    "type": "text",
-                    "text": block.text
-                })
-                if verbose:
-                    preview = block.text[:120].replace('\n', ' ')
-                    print(f"  [turn {turn} text] {preview}...")
-
-            elif block.type == "tool_use":
-                tool_calls.append({
-                    "id": block.id,
-                    "name": block.name,
-                    "input": block.input
-                })
-                traj_entry["blocks"].append({
-                    "type": "tool_use",
-                    "name": block.name,
-                    "input": block.input,
-                    "id": block.id
-                })
-                if verbose:
-                    preview = str(block.input)[:80]
-                    print(f"  [turn {turn} tool_use] {block.name}: {preview}...")
+        if response.text:
+            traj_entry["blocks"].append({"type": "text", "text": response.text})
+            if verbose:
+                preview = response.text[:120].replace('\n', ' ')
+                print(f"  [turn {turn} text] {preview}...")
+        for tc in response.tool_calls:
+            traj_entry["blocks"].append({
+                "type": "tool_use",
+                "name": tc["name"],
+                "input": tc["input"],
+                "id": tc["id"]
+            })
+            if verbose:
+                preview = str(tc["input"])[:80]
+                print(f"  [turn {turn} tool_use] {tc['name']}: {preview}...")
 
         trajectory.append(traj_entry)
 
-        # Append assistant message (raw content blocks, as expected by Anthropic SDK)
-        messages.append({"role": "assistant", "content": response.content})
+        # Append assistant turn to neutral history
+        messages.append({
+            "role": "assistant",
+            "text": response.text,
+            "tool_calls": response.tool_calls
+        })
 
         # Stop if no tool calls
         if response.stop_reason == "end_turn":
-            final_response = "\n".join(text_blocks)
+            final_response = response.text
             if verbose:
                 print(f"  [done in {turn} turns]")
             break
 
         # Execute tool calls and append results
-        if response.stop_reason == "tool_use" and tool_calls:
-            tool_result_blocks = []
-            for tc in tool_calls:
+        if response.stop_reason == "tool_use" and response.tool_calls:
+            tool_results = []
+            for tc in response.tool_calls:
                 executor = TOOL_EXECUTORS.get(tc["name"])
                 if executor:
                     tool_output = executor(tc["input"])
@@ -190,13 +184,13 @@ def run_task(task: dict, verbose: bool = True) -> dict:
                     preview = tool_output[:100].replace('\n', ' ')
                     print(f"  [turn {turn} tool_result] {preview}")
 
-                tool_result_blocks.append({
-                    "type": "tool_result",
-                    "tool_use_id": tc["id"],
-                    "content": tool_output
+                tool_results.append({
+                    "id": tc["id"],
+                    "name": tc["name"],
+                    "output": tool_output
                 })
 
-            messages.append({"role": "user", "content": tool_result_blocks})
+            messages.append({"role": "tool", "results": tool_results})
 
     elapsed = time.time() - start_time
 
@@ -210,6 +204,8 @@ def run_task(task: dict, verbose: bool = True) -> dict:
         "turns": len(trajectory),
         "elapsed_seconds": round(elapsed, 2),
         "error": error,
+        "provider": PROVIDER,
+        "model": MODEL,
         "timestamp": datetime.utcnow().isoformat()
     }
 
@@ -234,7 +230,7 @@ def run_benchmark(
     if categories:
         tasks = [t for t in tasks if t["category"] in categories]
 
-    print(f"\nRunning {len(tasks)} tasks on model: {MODEL}")
+    print(f"\nRunning {len(tasks)} tasks on {PROVIDER} / {MODEL}")
 
     raw_dir = RESULTS_DIR / "raw"
     raw_dir.mkdir(parents=True, exist_ok=True)

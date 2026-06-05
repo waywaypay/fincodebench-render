@@ -11,6 +11,14 @@ services:
       - key: ANTHROPIC_API_KEY
         sync: false         # optional — dashboard runs are bring-your-own-key; only the harness CLI uses this
 
+      # Dashboard runs are bring-your-own-key for any provider (Anthropic, OpenAI,
+      # OpenRouter, DeepSeek, Qwen, Kimi, Venice) — the key is supplied per request.
+      # The vars below only affect the harness CLI / module defaults; set the
+      # matching key env var (e.g. OPENAI_API_KEY, OPENROUTER_API_KEY,
+      # DEEPSEEK_API_KEY, DASHSCOPE_API_KEY, MOONSHOT_API_KEY, VENICE_API_KEY) too.
+      - key: FINCODEBENCH_PROVIDER
+        sync: false         # optional — CLI default provider (default: anthropic)
+
       - key: FINCODEBENCH_API_KEY
         sync: false         # optional — gates the destructive DELETE/tasks only; /runs is bring-your-own-key
 
@@ -18,10 +26,10 @@ services:
         value: /data        # persistent disk mount point
 
       - key: FINCODEBENCH_MODEL
-        value: claude-haiku-4-5    # runner model — cheap default; change here or in dashboard
+        sync: false         # optional — runner model override; defaults to the provider's default model
 
       - key: FINCODEBENCH_JUDGE_MODEL
-        value: claude-sonnet-4-5   # judge model for agentic tasks (kept distinct from runner)
+        sync: false         # optional — judge model override; defaults to the provider's default judge model
 
     disk:
       name: fincodebench-data
