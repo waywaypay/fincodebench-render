@@ -13,6 +13,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+import anthropic
 from fastapi import FastAPI, BackgroundTasks, HTTPException, Header, Query
 from fastapi.responses import JSONResponse, FileResponse
 from pydantic import BaseModel
@@ -62,8 +63,10 @@ registry_lock = threading.Lock()
 
 
 # ── Run execution (background thread) ─────────────────────────────────────────
-def _execute_run(run_id: str, task_ids: Optional[list], categories: Optional[list]):
-    """Runs the full eval pipeline in a background thread. Updates registry on completion."""
+def _execute_run(run_id: str, task_ids: Optional[list], categories: Optional[list],
+                 anthropic_api_key: str):
+    """Runs the full eval pipeline in a background thread on the visitor's own
+    Anthropic key (bring-your-own-key). Updates registry on completion."""
     from runner import run_benchmark
     from scorer import score_task
     from judge import score_pending_judge_tasks
@@ -80,12 +83,19 @@ def _execute_run(run_id: str, task_ids: Optional[list], categories: Optional[lis
         _save_registry(reg)
 
     try:
-        # Override results dir so runner writes to run_dir
+        # Override module globals so the runner writes to run_dir and every
+        # Anthropic call uses the visitor's key, not the server's (restored below).
         import runner as runner_mod
+        import judge as judge_mod
         import eval as eval_mod
         original_results = runner_mod.RESULTS_DIR
+        original_runner_client = runner_mod.client
+        original_judge_client = judge_mod.client
         runner_mod.RESULTS_DIR = run_dir
         eval_mod.RESULTS_DIR = run_dir
+        run_client = anthropic.Anthropic(api_key=anthropic_api_key)
+        runner_mod.client = run_client
+        judge_mod.client = run_client
 
         # Load tasks
         with open(Path(__file__).parent / "tasks" / "tasks.json") as f:
@@ -136,9 +146,11 @@ def _execute_run(run_id: str, task_ids: Optional[list], categories: Optional[lis
             _save_registry(reg)
         raise
     finally:
-        # Restore paths
+        # Restore module globals
         runner_mod.RESULTS_DIR = original_results
         eval_mod.RESULTS_DIR = original_results
+        runner_mod.client = original_runner_client
+        judge_mod.client = original_judge_client
 
 
 # ── FastAPI app ───────────────────────────────────────────────────────────────
@@ -169,38 +181,6 @@ def health():
     return {"status": "ok", "timestamp": datetime.utcnow().isoformat()}
 
 
-@app.get("/auth/check", include_in_schema=False)
-def auth_check(
-    key: Optional[str] = Query(default=None),
-    x_api_key: Optional[str] = Header(default=None),
-):
-    """
-    Temporary diagnostic for the "Invalid API key" error. It NEVER returns the
-    key values themselves — only lengths and booleans — so it is safe to call.
-    Accepts the key via the X-API-Key header or a ?key= query param so you can
-    test straight from a browser URL. Remove once the key problem is resolved.
-
-    Reading the result:
-      * 404                          -> this build isn't deployed yet
-      * match=true                   -> keys match; any 401 is a stale/old deploy
-      * match=false, lengths_match=false -> different length: the Render value has
-                                        extra chars (often wrapping quotes/space)
-                                        or is simply a different key
-      * match=false, lengths_match=true  -> same length, different content: a typo
-                                        or a genuinely different key
-    """
-    provided = ((key if key is not None else x_api_key) or "").strip()
-    return {
-        "server_key_configured": bool(API_KEY),
-        "provided_key_present": (key is not None) or (x_api_key is not None),
-        "provided_key_length": len(provided),
-        "lengths_match": len(provided) == len(API_KEY),
-        "match": bool(API_KEY) and secrets.compare_digest(
-            provided.encode("utf-8"), API_KEY.encode("utf-8")
-        ),
-    }
-
-
 # ── Dashboard (public, read-only) ─────────────────────────────────────────────
 @app.get("/", include_in_schema=False)
 def dashboard_index():
@@ -216,8 +196,9 @@ def dashboard_data():
     """
     Public payload for the dashboard: the full task set plus a summary of all
     runs. No secrets and no trajectories — safe to serve without the API key so
-    the methodology, tasks, and result charts are publicly viewable. The costly
-    POST /runs and destructive DELETE stay protected by FINCODEBENCH_API_KEY.
+    the methodology, tasks, and result charts are publicly viewable. POST /runs
+    is bring-your-own-key (the caller supplies their own Anthropic key); the
+    destructive DELETE stays gated by FINCODEBENCH_API_KEY.
     """
     with open(TASKS_FILE) as f:
         tasks = json.load(f)
@@ -271,18 +252,26 @@ def list_tasks(
 def create_run(
     req: RunRequest,
     background_tasks: BackgroundTasks,
-    x_api_key: Optional[str] = Header(default=None)
+    x_anthropic_api_key: Optional[str] = Header(default=None),
 ):
     """
-    Trigger a new eval run. Returns run_id immediately; execution is async.
-    Poll GET /runs/{run_id} for status and results.
+    Trigger a new eval run on the caller's own Anthropic key (bring-your-own-key).
+    The key is supplied via the X-Anthropic-Api-Key header, used for every model
+    call in the run, billed to the caller, and never stored or logged. Returns
+    run_id immediately; execution is async. Poll GET /runs/{run_id} for status.
     """
-    verify_key(x_api_key)
+    anthropic_api_key = (x_anthropic_api_key or "").strip()
+    if not anthropic_api_key:
+        raise HTTPException(
+            status_code=401,
+            detail="Bring your own Anthropic API key: send it in the "
+                   "X-Anthropic-Api-Key header (sk-ant-...).",
+        )
     req.validate_categories()
 
     run_id = datetime.utcnow().strftime("%Y%m%d_%H%M%S") + "_" + str(uuid.uuid4())[:8]
 
-    # Register
+    # Register (the Anthropic key is deliberately never written to the registry)
     with registry_lock:
         reg = _load_registry()
         reg[run_id] = {
@@ -299,7 +288,8 @@ def create_run(
         _execute_run,
         run_id=run_id,
         task_ids=req.task_ids,
-        categories=req.categories
+        categories=req.categories,
+        anthropic_api_key=anthropic_api_key,
     )
 
     return {

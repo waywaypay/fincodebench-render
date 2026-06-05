@@ -14,7 +14,9 @@ import re
 from typing import Optional
 import anthropic
 
-client = anthropic.Anthropic()
+# Overridden per run by the web service with the caller's own key (BYOK); fall
+# back to a placeholder so a missing ANTHROPIC_API_KEY can't break import.
+client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY") or "placeholder")
 
 JUDGE_MODEL = os.environ.get("FINCODEBENCH_JUDGE_MODEL", "claude-sonnet-4-5")  # kept distinct from runner to avoid self-grading; override via FINCODEBENCH_JUDGE_MODEL
 

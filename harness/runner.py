@@ -19,7 +19,10 @@ MAX_TOKENS = 4096
 RESULTS_DIR = Path("results")
 TASKS_FILE = Path("tasks/tasks.json")
 
-client = anthropic.Anthropic()     # reads ANTHROPIC_API_KEY from env
+# Built from ANTHROPIC_API_KEY for direct CLI use. The web service overrides this
+# per run with the caller's own key (bring-your-own-key), so a missing env key
+# must not break import — fall back to a placeholder that gets replaced.
+client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY") or "placeholder")
 
 
 # ── Tool definitions ─────────────────────────────────────────────────────────
