@@ -10,7 +10,7 @@ import tempfile
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Callable
 import anthropic
 
 # ── Config ──────────────────────────────────────────────────────────────────
@@ -218,7 +218,8 @@ def run_task(task: dict, verbose: bool = True) -> dict:
 def run_benchmark(
     task_ids: Optional[list] = None,
     categories: Optional[list] = None,
-    verbose: bool = True
+    verbose: bool = True,
+    progress_callback: Optional[Callable] = None
 ) -> list:
     """
     Run all (or filtered) tasks, save raw results to results/raw/.
@@ -239,7 +240,13 @@ def run_benchmark(
     raw_dir.mkdir(parents=True, exist_ok=True)
 
     results = []
-    for task in tasks:
+    total = len(tasks)
+    for i, task in enumerate(tasks):
+        if progress_callback:
+            try:
+                progress_callback(i, total, task["id"])
+            except Exception:
+                pass
         result = run_task(task, verbose=verbose)
         results.append(result)
 
@@ -247,6 +254,12 @@ def run_benchmark(
         out_path = raw_dir / f"{task['id']}.json"
         with open(out_path, 'w') as f:
             json.dump(result, f, indent=2)
+
+    if progress_callback:
+        try:
+            progress_callback(total, total, None)
+        except Exception:
+            pass
 
     # Save full batch
     batch_id = datetime.utcnow().strftime("%Y%m%d_%H%M%S")

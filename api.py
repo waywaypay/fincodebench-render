@@ -97,6 +97,19 @@ def _execute_run(run_id: str, task_ids: Optional[list], categories: Optional[lis
         runner_mod.client = run_client
         judge_mod.client = run_client
 
+        # Live progress: write phase/counter to the registry so the dashboard
+        # can show "Running 12/28 · agentic-003" instead of a bare "running".
+        def _progress(phase):
+            def cb(done, total, current):
+                with registry_lock:
+                    reg = _load_registry()
+                    if run_id in reg:
+                        reg[run_id]["progress"] = {
+                            "phase": phase, "done": done, "total": total, "current": current,
+                        }
+                        _save_registry(reg)
+            return cb
+
         # Load tasks
         with open(Path(__file__).parent / "tasks" / "tasks.json") as f:
             all_tasks = json.load(f)
@@ -106,10 +119,12 @@ def _execute_run(run_id: str, task_ids: Optional[list], categories: Optional[lis
         results = run_benchmark(
             task_ids=task_ids,
             categories=categories,
-            verbose=False
+            verbose=False,
+            progress_callback=_progress("running"),
         )
 
         # Score deterministic
+        _progress("scoring")(len(results), len(results), None)
         for result in results:
             task = tasks_map.get(result["task_id"])
             if task and task.get("scoring_type") != "llm_judge":
@@ -117,7 +132,10 @@ def _execute_run(run_id: str, task_ids: Optional[list], categories: Optional[lis
 
         # LLM judge
         calib_path = str(run_dir / "calibration_template.json")
-        results = score_pending_judge_tasks(results, tasks_map, calibration_path=calib_path)
+        results = score_pending_judge_tasks(
+            results, tasks_map, calibration_path=calib_path,
+            progress_callback=_progress("judging"),
+        )
 
         # Generate report
         report = generate_report(results, tasks_map)

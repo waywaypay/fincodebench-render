@@ -11,7 +11,7 @@ Key design choices:
 import json
 import os
 import re
-from typing import Optional
+from typing import Optional, Callable
 import anthropic
 
 # Overridden per run by the web service with the caller's own key (BYOK); fall
@@ -94,7 +94,8 @@ def llm_judge(
 def score_pending_judge_tasks(
     results: list[dict],
     tasks: dict,
-    calibration_path: Optional[str] = None
+    calibration_path: Optional[str] = None,
+    progress_callback: Optional[Callable] = None
 ) -> list[dict]:
     """
     For all results where scoring_type == 'llm_judge', run the judge and attach scores.
@@ -102,12 +103,22 @@ def score_pending_judge_tasks(
     """
     calibration = []
 
+    total_judge = sum(
+        1 for r in results
+        if (tasks.get(r["task_id"]) or {}).get("scoring_type") == "llm_judge"
+    )
+    done = 0
     for result in results:
         task_id = result["task_id"]
         task = tasks.get(task_id)
         if not task or task.get("scoring_type") != "llm_judge":
             continue
 
+        if progress_callback:
+            try:
+                progress_callback(done, total_judge, task_id)
+            except Exception:
+                pass
         print(f"  Judging: {task_id}")
         judgment = llm_judge(
             task_prompt=task["prompt"],
@@ -117,6 +128,7 @@ def score_pending_judge_tasks(
         )
 
         result["score_result"] = judgment
+        done += 1
 
         calibration.append({
             "task_id": task_id,
