@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FinCodeBench — financial coding agent eval suite</title>
+<style>
+  :root{
+    --bg:#f6f7f9; --card:#ffffff; --border:#e4e7ec; --text:#1a1d23; --muted:#667085;
+    --accent:#4f46e5; --accent-soft:#eef2ff;
+    --green:#16a34a; --amber:#d97706; --red:#dc2626; --gray:#98a2b3;
+    --extraction:#0ea5e9; --code_generation:#8b5cf6; --computation:#10b981;
+    --agentic:#f59e0b; --debug:#ef4444;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);line-height:1.55;font-size:15px}
+  a{color:var(--accent)}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 20px}
+  header{background:var(--card);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:10}
+  header .wrap{display:flex;align-items:center;gap:18px;height:60px}
+  .brand{font-weight:700;font-size:18px;letter-spacing:-.2px}
+  .brand .dot{color:var(--accent)}
+  nav{display:flex;gap:4px;margin-left:auto}
+  nav button{background:none;border:none;font:inherit;color:var(--muted);padding:8px 14px;border-radius:8px;cursor:pointer;font-weight:500}
+  nav button:hover{background:var(--bg)}
+  nav button.active{color:var(--accent);background:var(--accent-soft)}
+  main{padding:34px 0 80px}
+  h1{font-size:30px;letter-spacing:-.5px;margin:0 0 6px}
+  h2{font-size:21px;letter-spacing:-.3px;margin:38px 0 14px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+  h3{font-size:15px;margin:0 0 4px}
+  .lead{color:var(--muted);font-size:16px;max-width:70ch;margin:0 0 8px}
+  .view{display:none}.view.active{display:block}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px 20px}
+  .grid{display:grid;gap:14px}
+  .cols-2{grid-template-columns:repeat(2,1fr)}
+  .cols-3{grid-template-columns:repeat(3,1fr)}
+  .cols-4{grid-template-columns:repeat(4,1fr)}
+  @media(max-width:760px){.cols-2,.cols-3,.cols-4{grid-template-columns:1fr}}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--border);vertical-align:top}
+  th{color:var(--muted);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+  tbody tr:last-child td{border-bottom:none}
+  .badge{display:inline-block;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:600;white-space:nowrap}
+  .badge.easy{background:#ecfdf5;color:#047857}
+  .badge.medium{background:#fffbeb;color:#b45309}
+  .badge.hard{background:#fef2f2;color:#b91c1c}
+  .badge.cat{color:#fff}
+  .badge.method{background:#f2f4f7;color:#344054;font-family:var(--mono);font-weight:500}
+  .muted{color:var(--muted)}
+  .mono{font-family:var(--mono);font-size:13px}
+  code{font-family:var(--mono);background:#f2f4f7;padding:1px 5px;border-radius:5px;font-size:.9em}
+  pre{background:#0f172a;color:#e2e8f0;border-radius:9px;padding:13px 15px;overflow:auto;font-size:12.5px;font-family:var(--mono);margin:8px 0 0}
+  .method-card{padding:16px 18px}
+  .method-card h3{font-family:var(--mono);color:var(--accent);font-size:14px}
+  .method-card p{margin:6px 0 0;font-size:14px;color:#344054}
+  .pill{font-size:12px;color:var(--muted);background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:1px 7px;margin-left:6px}
+  /* tasks */
+  .filters{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 16px;align-items:center}
+  .filters select,.filters input{font:inherit;font-size:14px;padding:7px 10px;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--text)}
+  .filters input{flex:1;min-width:160px}
+  .task{padding:0;overflow:hidden}
+  .task summary{list-style:none;cursor:pointer;padding:14px 18px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .task summary::-webkit-details-marker{display:none}
+  .task summary .id{font-family:var(--mono);font-weight:600;font-size:13px}
+  .task summary .prompt{flex:1;min-width:220px;color:#475467;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .task[open] summary .prompt{white-space:normal}
+  .task .body{padding:4px 18px 18px;border-top:1px solid var(--border)}
+  .task .body .label{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin:14px 0 4px;font-weight:600}
+  .full-prompt{white-space:pre-wrap;font-size:14px;color:#1a1d23}
+  /* results */
+  .statbig{font-size:34px;font-weight:700;letter-spacing:-1px;line-height:1}
+  .statlabel{color:var(--muted);font-size:13px;margin-top:6px}
+  .chart-row{display:flex;align-items:center;gap:10px;margin:7px 0;font-size:13px}
+  .chart-row .clabel{width:130px;flex-shrink:0;text-align:right;color:#344054}
+  .chart-row .ctrack{flex:1;background:var(--bg);border-radius:6px;height:22px;position:relative;overflow:hidden;border:1px solid var(--border)}
+  .chart-row .cfill{height:100%;border-radius:5px 0 0 5px;display:flex;align-items:center;justify-content:flex-end;color:#fff;font-size:11px;font-weight:600;padding-right:6px;min-width:26px}
+  .chart-row .cn{width:42px;color:var(--muted);font-size:12px}
+  .heat{display:flex;flex-wrap:wrap;gap:5px}
+  .heat .cell{width:26px;height:26px;border-radius:5px;cursor:default}
+  .heatgroup{margin:10px 0}
+  .heatgroup .gl{font-size:12px;color:var(--muted);margin-bottom:5px;font-weight:600}
+  .empty{text-align:center;padding:46px 20px;color:var(--muted)}
+  .runbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:18px}
+  .runbar select{font:inherit;padding:8px 11px;border:1px solid var(--border);border-radius:8px;background:var(--card)}
+  .btn{background:var(--accent);color:#fff;border:none;border-radius:8px;padding:8px 14px;font:inherit;font-weight:600;cursor:pointer}
+  .btn.ghost{background:var(--card);color:var(--accent);border:1px solid var(--border)}
+  .btn:disabled{opacity:.5;cursor:default}
+  .trigger{margin-top:14px}
+  .trigger input{font:inherit;font-size:14px;padding:8px 11px;border:1px solid var(--border);border-radius:8px}
+  .note{font-size:13px;color:var(--muted)}
+  .scorebar{display:inline-block;width:64px;height:8px;border-radius:4px;background:var(--bg);overflow:hidden;vertical-align:middle;margin-right:8px;border:1px solid var(--border)}
+  .scorebar i{display:block;height:100%}
+  footer{border-top:1px solid var(--border);color:var(--muted);font-size:13px;padding:22px 0}
+</style>
+</head>
+<body>
+<header><div class="wrap">
+  <div class="brand">FinCode<span class="dot">Bench</span></div>
+  <nav>
+    <button data-view="overview" class="active">Methodology</button>
+    <button data-view="tasks">Tasks</button>
+    <button data-view="results">Results</button>
+  </nav>
+</div></header>
+
+<main class="wrap">
+
+<!-- ───────── METHODOLOGY ───────── -->
+<section id="overview" class="view active">
+  <h1>A coding-agent eval suite for financial data tasks</h1>
+  <p class="lead">FinCodeBench measures how well a coding agent extracts structured financial data, writes correct
+  financial code, runs multi-step agentic computations, and debugs broken models — the work done by quantitative
+  analysts, IR teams, and fintech developers. It is the domain where model errors are most costly: an off-by-one in a
+  DCF model or a hallucinated revenue figure is a wrong investment decision, not an inconvenience.</p>
+
+  <div class="grid cols-4" id="overviewStats" style="margin-top:18px"></div>
+
+  <h2>Task categories</h2>
+  <p class="lead">Every task belongs to one of five categories. The category determines what is tested and which scoring
+  method is applied. Counts below are computed live from the loaded task set.</p>
+  <div class="card" style="padding:4px 6px"><table id="catTable">
+    <thead><tr><th>Category</th><th>Tasks</th><th>Scoring method(s)</th><th>What it tests</th></tr></thead>
+    <tbody></tbody>
+  </table></div>
+
+  <h2>Scoring methods</h2>
+  <p class="lead">Four scorers are fully deterministic; one uses a separate Claude call as judge. Every task is reduced
+  to a single normalized score in <code>[0, 1]</code>.</p>
+  <div class="grid cols-2">
+    <div class="card method-card"><h3>exact_json</h3><p>Parse the first JSON object/array in the response and compare
+      it to the expected output by deep equality. Score is <b>1.0</b> on an exact match, else <b>0.0</b>. Used for
+      extraction tasks with unambiguous expected outputs.</p></div>
+    <div class="card method-card"><h3>fuzzy_number</h3><p>Extract every number from the response; score <b>1.0</b> if
+      any one falls within tolerance (default <b>±2%</b>) of the expected value, else <b>0.0</b>. Tolerant of
+      formatting differences in single-number computations.</p></div>
+    <div class="card method-card"><h3>fuzzy_dict</h3><p>Parse a JSON dict and compare each key's value to the expected
+      within tolerance (default <b>±0.5%</b>). Score is the <b>fraction of keys matched</b> (0–1) — partial credit for
+      multi-field outputs such as margin-by-quarter.</p></div>
+    <div class="card method-card"><h3>functional</h3><p>Extract the <code>```python</code> block, append a hidden unit
+      test suite, and execute it in a sandboxed subprocess (30s timeout). Score is <b>1.0</b> only if the process exits
+      0 <i>and</i> prints <code>PASS</code>, else <b>0.0</b>. The most rigorous method.</p></div>
+    <div class="card method-card"><h3>llm_judge</h3><p>A separate Claude call (the <b>judge model</b>, deliberately
+      distinct from the runner to avoid self-grading) scores the response <b>0–4</b> against a per-task rubric with
+      forced-JSON output, normalized to 0–1 (<code>score / 4</code>). Used for agentic tasks where output format varies
+      and execution matters.</p></div>
+    <div class="card method-card" style="background:var(--accent-soft);border-color:#c7d2fe"><h3 style="color:var(--accent)">pass@0.75</h3>
+      <p>The headline rate. A task "passes" when its normalized score is <b>≥ 0.75</b>. Reported overall and per
+      category alongside the mean score.</p></div>
+  </div>
+
+  <h2>How a single task is run</h2>
+  <div class="grid cols-2">
+    <div class="card">
+      <h3>The runner loop</h3>
+      <p class="note" style="margin-top:8px">The agent receives the task prompt (plus any context data) and exactly one
+      tool: <code>execute_python</code>, which runs Python in a sandboxed subprocess (30s timeout) and returns
+      stdout/stderr. It loops up to the task's <code>max_turns</code>, calling the tool as needed. Every turn, tool call,
+      and output is captured as a full trajectory. <code>max_tokens</code> = 4096 per turn.</p>
+      <p class="note">Runner model is configurable via <code>FINCODEBENCH_MODEL</code> (default
+      <code>claude-haiku-4-5</code>).</p>
+    </div>
+    <div class="card">
+      <h3>The judge rubric (0–4)</h3>
+      <table style="margin-top:6px;font-size:13px">
+        <tr><td class="mono">4</td><td><b>Perfect</b> — correct, complete, well-structured</td></tr>
+        <tr><td class="mono">3</td><td><b>Good</b> — mostly correct, minor issues</td></tr>
+        <tr><td class="mono">2</td><td><b>Partial</b> — right direction, key errors</td></tr>
+        <tr><td class="mono">1</td><td><b>Poor</b> — attempts but substantially wrong</td></tr>
+        <tr><td class="mono">0</td><td><b>Fail</b> — wrong, crashed, or refused</td></tr>
+      </table>
+      <p class="note" style="margin-top:8px">Code that crashes or returns wrong output is capped at 1; a refusal scores 0.
+      The judge scores strictly against the rubric, not its own opinion.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ───────── TASKS ───────── -->
+<section id="tasks" class="view">
+  <h1>The exact tasks</h1>
+  <p class="lead">All <span id="taskCount">—</span> tasks, verbatim. Expand any task to see its full prompt, the context
+  data the agent is given, and the exact scoring target (expected output, unit tests, or rubric).</p>
+  <div class="filters">
+    <select id="fCat"><option value="">All categories</option></select>
+    <select id="fDiff"><option value="">All difficulties</option></select>
+    <select id="fMethod"><option value="">All scoring methods</option></select>
+    <input id="fSearch" placeholder="Search id or prompt…">
+  </div>
+  <div class="grid" id="taskList"></div>
+</section>
+
+<!-- ───────── RESULTS ───────── -->
+<section id="results" class="view">
+  <h1>Results</h1>
+  <div class="runbar">
+    <label class="muted" style="font-size:14px">Run:</label>
+    <select id="runSelect"></select>
+    <button class="btn ghost" id="refreshRuns">Refresh</button>
+  </div>
+  <div id="resultsBody"></div>
+
+  <details class="card trigger">
+    <summary style="cursor:pointer;font-weight:600">Trigger a new run</summary>
+    <p class="note" style="margin-top:10px">Runs execute asynchronously on the server using the configured model. The
+    <code>POST /runs</code> endpoint is protected — supply <code>FINCODEBENCH_API_KEY</code> if one is set (leave blank
+    if not). The key is kept only in this browser tab.</p>
+    <div class="filters" style="margin-top:10px">
+      <select id="runScope">
+        <option value="all">All tasks</option>
+        <option value="extraction">Category: extraction</option>
+        <option value="code_generation">Category: code_generation</option>
+        <option value="computation">Category: computation</option>
+        <option value="agentic">Category: agentic</option>
+        <option value="debug">Category: debug</option>
+      </select>
+      <input id="runTask" placeholder="…or a single task id e.g. codegen-001" style="flex:1">
+      <input id="runKey" type="password" placeholder="X-API-Key (optional)">
+      <button class="btn" id="runBtn">Run</button>
+    </div>
+    <div id="runStatus" class="note"></div>
+  </details>
+</section>
+
+</main>
+<footer><div class="wrap">FinCodeBench · methodology and scoring derived directly from the harness ·
+  data served from <code>/dashboard/data</code></div></footer>
+
+<script>
+const STATE = {tasks:[], runs:[], catColors:{
+  extraction:'var(--extraction)', code_generation:'var(--code_generation)',
+  computation:'var(--computation)', agentic:'var(--agentic)', debug:'var(--debug)'}};
+const CAT_DESC = {
+  extraction:'Parse financial tables, filings, and press releases into structured data.',
+  code_generation:'Write correct financial functions from a spec.',
+  computation:'Financial formulas and ratios — gross margin, WACC, Altman Z-Score.',
+  agentic:'Multi-step: parse data, compute, then summarize a conclusion.',
+  debug:'Find and fix bugs in broken financial code.'};
+const $ = s => document.querySelector(s);
+const el = (t,c,h)=>{const e=document.createElement(t);if(c)e.className=c;if(h!=null)e.innerHTML=h;return e;};
+const esc = s => (s==null?'':String(s)).replace(/[&<>]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[m]));
+const scoreColor = v => v==null?'var(--gray)':v<0.5?'var(--red)':v<0.75?'var(--amber)':'var(--green)';
+const pct = v => v==null?'—':Math.round(v*100)+'%';
+
+// nav
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('nav button').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active'); $('#'+b.dataset.view).classList.add('active');
+});
+
+async function init(){
+  try{
+    const d = await (await fetch('dashboard/data')).json();
+    STATE.tasks = d.tasks||[]; STATE.runs = d.runs||[];
+    renderOverview(); renderTasks(); renderRunSelector();
+  }catch(e){ $('#resultsBody').innerHTML='<div class="empty">Failed to load data: '+esc(e.message)+'</div>'; }
+}
+
+// ---------- methodology ----------
+function renderOverview(){
+  const cats = {}; const diffs = {};
+  STATE.tasks.forEach(t=>{
+    (cats[t.category] = cats[t.category]||{n:0,methods:new Set()});
+    cats[t.category].n++; cats[t.category].methods.add(t.scoring_type);
+    diffs[t.difficulty]=(diffs[t.difficulty]||0)+1;
+  });
+  const order=['extraction','code_generation','computation','agentic','debug'];
+  $('#overviewStats').innerHTML='';
+  const stats=[['Tasks',STATE.tasks.length],['Categories',Object.keys(cats).length],
+    ['Scoring methods',new Set(STATE.tasks.map(t=>t.scoring_type)).size],
+    ['Difficulty levels',Object.keys(diffs).length]];
+  stats.forEach(([l,v])=>{const c=el('div','card');c.innerHTML=
+    `<div class="statbig">${v}</div><div class="statlabel">${l}</div>`;$('#overviewStats').append(c);});
+  const tb=$('#catTable tbody'); tb.innerHTML='';
+  order.filter(c=>cats[c]).forEach(c=>{
+    const r=el('tr');
+    r.innerHTML=`<td><span class="badge cat" style="background:${STATE.catColors[c]}">${c}</span></td>`+
+      `<td>${cats[c].n}</td>`+
+      `<td>${[...cats[c].methods].map(m=>`<span class="badge method">${m}</span>`).join(' ')}</td>`+
+      `<td class="muted">${CAT_DESC[c]||''}</td>`;
+    tb.append(r);
+  });
+}
+
+// ---------- tasks ----------
+function renderTasks(){
+  ['Cat','Diff','Method'].forEach(()=>{});
+  const cats=[...new Set(STATE.tasks.map(t=>t.category))];
+  const diffs=['easy','medium','hard'].filter(d=>STATE.tasks.some(t=>t.difficulty===d));
+  const methods=[...new Set(STATE.tasks.map(t=>t.scoring_type))];
+  fill('#fCat',cats); fill('#fDiff',diffs); fill('#fMethod',methods);
+  ['#fCat','#fDiff','#fMethod','#fSearch'].forEach(s=>$(s).oninput=drawTasks);
+  drawTasks();
+  function fill(sel,vals){vals.forEach(v=>{const o=el('option');o.value=v;o.textContent=v;$(sel).append(o);});}
+}
+function drawTasks(){
+  const c=$('#fCat').value,d=$('#fDiff').value,m=$('#fMethod').value,q=$('#fSearch').value.toLowerCase();
+  const list=$('#taskList'); list.innerHTML='';
+  const rows=STATE.tasks.filter(t=>(!c||t.category===c)&&(!d||t.difficulty===d)&&(!m||t.scoring_type===m)
+    &&(!q||t.id.toLowerCase().includes(q)||(t.prompt||'').toLowerCase().includes(q)));
+  $('#taskCount').textContent=STATE.tasks.length;
+  if(!rows.length){list.innerHTML='<div class="empty">No tasks match these filters.</div>';return;}
+  rows.forEach(t=>{
+    const det=el('details','card task');
+    const target = targetHtml(t);
+    det.innerHTML=
+      `<summary>
+         <span class="id">${t.id}</span>
+         <span class="badge cat" style="background:${STATE.catColors[t.category]}">${t.category}</span>
+         <span class="badge ${t.difficulty}">${t.difficulty}</span>
+         <span class="badge method">${t.scoring_type}</span>
+         <span class="prompt">${esc(t.prompt)}</span>
+       </summary>
+       <div class="body">
+         <div class="label">Prompt</div><div class="full-prompt">${esc(t.prompt)}</div>
+         ${t.context?`<div class="label">Context provided to the agent</div><pre>${esc(t.context)}</pre>`:''}
+         <div class="label">Scoring target · ${t.scoring_type}${t.tolerance!=null?` · tolerance ±${t.tolerance}`:''} · max turns ${t.max_turns??'—'}</div>
+         ${target}
+       </div>`;
+    list.append(det);
+  });
+}
+function targetHtml(t){
+  if(t.scoring_type==='functional') return `<pre>${esc(t.test_code||'')}</pre>`;
+  if(t.scoring_type==='llm_judge')  return `<div class="full-prompt">${esc(t.rubric||'')}</div>`;
+  if(t.expected_output!=null) return `<pre>${esc(JSON.stringify(t.expected_output,null,2))}</pre>`;
+  return '<div class="muted">—</div>';
+}
+
+// ---------- results ----------
+function renderRunSelector(){
+  const sel=$('#runSelect'); sel.innerHTML='';
+  const done=STATE.runs.filter(r=>r.status==='completed');
+  if(!done.length){
+    sel.innerHTML='<option>— no completed runs —</option>';
+    $('#resultsBody').innerHTML=
+      `<div class="card empty">No completed runs yet.<br><br>
+        <span class="note">Trigger one below, or from a shell:</span>
+        <pre style="text-align:left;max-width:560px;margin:14px auto 0">curl -X POST &lt;url&gt;/runs \\
+  -H 'Content-Type: application/json' \\
+  -H 'X-API-Key: &lt;key&gt;' \\
+  -d '{"task_ids":["codegen-001"]}'</pre></div>`;
+    return;
+  }
+  done.forEach(r=>{const o=el('option');o.value=r.run_id;
+    o.textContent=`${r.run_id.slice(0,15)} · ${r.n_tasks||'?'} tasks · mean ${r.mean_score!=null?Math.round(r.mean_score*100)+'%':'—'}`;
+    sel.append(o);});
+  sel.onchange=()=>loadRun(sel.value);
+  loadRun(done[0].run_id);
+}
+$('#refreshRuns').onclick=async()=>{
+  const d=await (await fetch('dashboard/data')).json(); STATE.runs=d.runs||[]; renderRunSelector();
+};
+async function loadRun(id){
+  const body=$('#resultsBody'); body.innerHTML='<div class="empty">Loading…</div>';
+  try{
+    const rep=await (await fetch('dashboard/runs/'+encodeURIComponent(id))).json();
+    renderReport(rep);
+  }catch(e){ body.innerHTML='<div class="empty">Could not load run: '+esc(e.message)+'</div>'; }
+}
+function renderReport(rep){
+  const body=$('#resultsBody'); body.innerHTML='';
+  const ov=rep.overall||{};
+  const stats=[['Mean score',pct(ov.mean_score)],['pass@0.75',pct(ov.pass_rate_75)],
+    ['Tasks',rep.n_tasks??'—'],['Model',rep.model||'—']];
+  const sg=el('div','grid cols-4'); stats.forEach(([l,v])=>{
+    const c=el('div','card');c.innerHTML=`<div class="statbig" style="font-size:${String(v).length>9?'20px':'34px'}">${esc(v)}</div><div class="statlabel">${l}</div>`;sg.append(c);});
+  body.append(sg);
+
+  // mean by category
+  const catItems=Object.entries(rep.by_category||{}).map(([k,v])=>({label:k,value:v.mean,n:v.n,color:STATE.catColors[k]}));
+  body.append(chartCard('Mean score by category', catItems));
+  // mean by difficulty
+  const order={easy:0,medium:1,hard:2};
+  const diffItems=Object.entries(rep.by_difficulty||{}).sort((a,b)=>order[a[0]]-order[b[0]])
+    .map(([k,v])=>({label:k,value:v.mean,n:v.n,color:scoreColor(v.mean)}));
+  body.append(chartCard('Mean score by difficulty', diffItems));
+
+  // per-task heatmap grouped by category
+  const heat=el('div','card'); heat.append(el('h3',null,'Per-task scores'));
+  heat.append(el('p','note','Each cell is one task, colored by score: '+
+    '<span style="color:var(--green)">■ ≥75%</span> '+
+    '<span style="color:var(--amber)">■ 50–75%</span> '+
+    '<span style="color:var(--red)">■ &lt;50%</span> '+
+    '<span style="color:var(--gray)">■ unscored</span>'));
+  const byCat={}; (rep.task_scores||[]).forEach(t=>{(byCat[t.category]=byCat[t.category]||[]).push(t);});
+  ['extraction','code_generation','computation','agentic','debug'].filter(c=>byCat[c]).forEach(c=>{
+    const g=el('div','heatgroup'); g.append(el('div','gl',c));
+    const row=el('div','heat');
+    byCat[c].forEach(t=>{const cell=el('div','cell');cell.style.background=scoreColor(t.score);
+      cell.title=`${t.id} — ${t.score==null?'unscored':Math.round(t.score*100)+'%'} (${t.method})`;row.append(cell);});
+    g.append(row); heat.append(g);
+  });
+  body.append(heat);
+
+  // detailed table
+  const tcard=el('div','card'); tcard.style.padding='4px 6px';
+  const rows=(rep.task_scores||[]).slice().sort((a,b)=>(a.score??-1)-(b.score??-1));
+  tcard.innerHTML='<table><thead><tr><th>Task</th><th>Category</th><th>Diff</th><th>Method</th><th>Turns</th><th style="width:160px">Score</th></tr></thead><tbody>'+
+    rows.map(t=>`<tr>
+      <td class="mono">${t.task_id}</td>
+      <td><span class="badge cat" style="background:${STATE.catColors[t.category]}">${t.category}</span></td>
+      <td><span class="badge ${t.difficulty}">${t.difficulty}</span></td>
+      <td><span class="badge method">${t.method}</span></td>
+      <td>${t.turns??'—'}</td>
+      <td><span class="scorebar"><i style="width:${t.score!=null?Math.round(t.score*100):0}%;background:${scoreColor(t.score)}"></i></span>${pct(t.score)}</td>
+    </tr>`).join('')+'</tbody></table>';
+  body.append(tcard);
+}
+function chartCard(title, items){
+  const c=el('div','card'); c.append(el('h3',null,title));
+  if(!items.length){c.append(el('p','note','No data.'));return c;}
+  items.forEach(it=>{
+    const row=el('div','chart-row');
+    const w=Math.max(0,Math.min(100,(it.value??0)*100));
+    row.innerHTML=`<div class="clabel">${esc(it.label)}</div>
+      <div class="ctrack"><div class="cfill" style="width:${w}%;background:${it.color||scoreColor(it.value)}">${it.value!=null?Math.round(w)+'%':''}</div></div>
+      <div class="cn">n=${it.n??'—'}</div>`;
+    c.append(row);
+  });
+  return c;
+}
+
+// ---------- trigger ----------
+$('#runBtn').onclick=async()=>{
+  const scope=$('#runScope').value, taskId=$('#runTask').value.trim(), key=$('#runKey').value.trim();
+  const st=$('#runStatus'); const btn=$('#runBtn');
+  const payload = taskId ? {task_ids:[taskId]} : (scope==='all'?{}:{categories:[scope]});
+  btn.disabled=true; st.textContent='Submitting…';
+  try{
+    const headers={'Content-Type':'application/json'}; if(key) headers['X-API-Key']=key;
+    const res=await fetch('runs',{method:'POST',headers,body:JSON.stringify(payload)});
+    if(!res.ok){st.textContent='Error '+res.status+': '+esc(await res.text());btn.disabled=false;return;}
+    const {run_id}=await res.json();
+    st.textContent='Queued '+run_id+' — polling…';
+    poll(run_id,st,btn);
+  }catch(e){ st.textContent='Failed: '+esc(e.message); btn.disabled=false; }
+};
+async function poll(id,st,btn){
+  for(let i=0;i<600;i++){
+    await new Promise(r=>setTimeout(r,3000));
+    let d; try{ d=await (await fetch('dashboard/data')).json(); }catch{ continue; }
+    STATE.runs=d.runs||[];
+    const r=STATE.runs.find(x=>x.run_id===id);
+    if(!r){st.textContent='Run not found.';break;}
+    st.textContent=`Status: ${r.status}…`;
+    if(r.status==='completed'){st.textContent='Completed ✓';renderRunSelector();$('#runSelect').value=id;loadRun(id);break;}
+    if(r.status==='failed'){st.textContent='Run failed — '+esc(r.error||'see server logs');break;}
+  }
+  btn.disabled=false;
+}
+
+init();
+</script>
+</body>
+</html>
