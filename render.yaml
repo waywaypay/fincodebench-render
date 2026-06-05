@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: fincodebench
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn api:app --host 0.0.0.0 --port $PORT
+    plan: starter          # upgrade to standard for longer eval runs
+    autoDeploy: true
+
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false         # set manually in Render dashboard — never commit this
+
+      - key: FINCODEBENCH_API_KEY
+        sync: false         # your own API key to protect the /runs endpoints
+
+      - key: DATA_DIR
+        value: /data        # persistent disk mount point
+
+    disk:
+      name: fincodebench-data
+      mountPath: /data
+      sizeGB: 1             # stores results JSON — 1GB is plenty

@@ -1,0 +1,18 @@
+# Secrets
+.env
+*.env
+
+# Results (large, not for git — stored on Render disk)
+data/
+results/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# Mac
+.DS_Store
