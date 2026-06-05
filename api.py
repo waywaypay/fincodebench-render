@@ -12,6 +12,7 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, BackgroundTasks, HTTPException, Header, Query
 from fastapi.responses import JSONResponse, FileResponse
@@ -46,19 +47,92 @@ def verify_key(x_api_key: Optional[str] = Header(default=None)):
         raise HTTPException(status_code=401, detail="Invalid API key")
 
 
-# ── In-memory run registry (survives restarts via JSON on disk) ───────────────
+# ── Run registry (JSON index on disk, self-healing from run folders) ──────────
+# registry.json is just an index of runs. The source of truth for a *completed*
+# run is its own folder (report.json + all_results.json), so we rebuild/repair
+# the index from those folders on every load. That way a lost, corrupted, or
+# half-written registry.json (e.g. a restart that interrupted a write — progress
+# is saved to it every few seconds during a run) never hides runs whose data is
+# still on disk.
+def _created_at_from_run_id(run_id: str) -> str:
+    # run_id looks like "YYYYmmdd_HHMMSS_<hex8>"; recover the queue time from it.
+    try:
+        stamp = "_".join(run_id.split("_")[:2])
+        return datetime.strptime(stamp, "%Y%m%d_%H%M%S").isoformat()
+    except Exception:
+        return ""
+
+def _run_entry_from_report(run_id: str, report: dict) -> dict:
+    overall = report.get("overall") or {}
+    return {
+        "run_id": run_id,
+        "status": "completed",
+        "created_at": _created_at_from_run_id(run_id) or report.get("timestamp", ""),
+        "completed_at": report.get("timestamp"),
+        "n_tasks": report.get("n_tasks"),
+        "mean_score": overall.get("mean_score"),
+        "pass_rate": overall.get("pass_rate_75"),
+        "provider": report.get("provider"),
+        "model": report.get("model"),
+        "judge_model": report.get("judge_model"),
+        "cost_usd": (report.get("cost_usd") or {}).get("total"),
+        "elapsed_seconds": (report.get("latency_seconds") or {}).get("total"),
+        "recovered": True,
+    }
+
+def _heal_registry(reg: dict) -> dict:
+    """Reconcile the registry with run folders on disk: add any completed run
+    missing from the index, and promote a stale queued/running entry to
+    completed once its report.json exists. Never deletes — only fills gaps."""
+    if not RESULTS_DIR.exists():
+        return reg
+    for run_dir in sorted(RESULTS_DIR.iterdir()):
+        if not run_dir.is_dir():
+            continue
+        run_id = run_dir.name
+        existing = reg.get(run_id)
+        if existing and existing.get("status") == "completed":
+            continue  # index already has the finished run
+        report_path = run_dir / "report.json"
+        if not report_path.exists():
+            continue  # not finished (or nothing recoverable) — leave as-is
+        try:
+            report = json.loads(report_path.read_text())
+        except Exception:
+            continue
+        entry = _run_entry_from_report(run_id, report)
+        if existing:
+            # Promote in place: keep everything the index already had (provider,
+            # model/judge_model overrides, task_ids, categories, queue time, …)
+            # and overlay only the non-null report-derived fields. Overlaying
+            # blindly would drop create-time metadata the report doesn't carry.
+            merged = dict(existing)
+            for k, v in entry.items():
+                if v is not None:
+                    merged[k] = v
+            merged["status"] = "completed"
+            merged["created_at"] = existing.get("created_at") or merged.get("created_at", "")
+            merged.pop("recovered", None)  # was tracked all along, not recovered
+            entry = merged
+        reg[run_id] = entry
+    return reg
+
 def _load_registry() -> dict:
     path = RESULTS_DIR / "registry.json"
+    reg = {}
     if path.exists():
         try:
-            return json.loads(path.read_text())
+            reg = json.loads(path.read_text())
         except Exception:
-            return {}
-    return {}
+            reg = {}  # corrupted — rebuilt from run folders below
+    return _heal_registry(reg)
 
 def _save_registry(registry: dict):
+    # Write atomically so a crash/restart mid-write can't corrupt the registry.
     path = RESULTS_DIR / "registry.json"
-    path.write_text(json.dumps(registry, indent=2))
+    tmp = path.with_name("registry.json.tmp")
+    tmp.write_text(json.dumps(registry, indent=2))
+    os.replace(tmp, path)
 
 registry_lock = threading.Lock()
 
@@ -189,10 +263,35 @@ def _execute_run(run_id: str, task_ids: Optional[list], categories: Optional[lis
 
 
 # ── FastAPI app ───────────────────────────────────────────────────────────────
+def _startup_repair_and_warn():
+    """Repair the run index from disk on boot, and flag ephemeral storage —
+    the usual reason runs 'disappear' after a redeploy."""
+    if not os.environ.get("DATA_DIR"):
+        print(
+            "WARNING: DATA_DIR is not set — writing runs to ephemeral './data'. "
+            "Run history will be LOST on every redeploy/restart. On Render, attach "
+            "a persistent disk and set DATA_DIR to its mount path (e.g. /data)."
+        )
+    else:
+        print(f"Run data directory: {RESULTS_DIR.resolve()}")
+    try:
+        with registry_lock:
+            _save_registry(_load_registry())  # persist any runs recovered from disk
+    except Exception as e:
+        print(f"Registry self-heal at startup failed (non-fatal): {e}")
+
+
+@asynccontextmanager
+async def _lifespan(app):
+    _startup_repair_and_warn()
+    yield
+
+
 app = FastAPI(
     title="FinCodeBench",
     description="Financial coding agent eval suite — benchmark Claude Code on financial tasks",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=_lifespan,
 )
 
 
