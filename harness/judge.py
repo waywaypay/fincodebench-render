@@ -46,6 +46,102 @@ Respond ONLY with a valid JSON object — no preamble, no markdown fences:
 {"score": <0|1|2|3|4>, "reasoning": "<one concise sentence>", "key_issues": ["<issue1>", "<issue2>"]}"""
 
 
+# ── Building what the judge sees ───────────────────────────────────────────────
+# The runner records the model's full trajectory (its text, the code it ran via
+# the execute_python tool, and the output that came back) but stores only the
+# last text turn in `final_response`. Agentic rubrics grade the *code and its
+# output* — which live in the trajectory — so judging `final_response` alone
+# leaves the judge seeing "no code" and scoring 0. We rebuild a labeled
+# transcript instead.
+MAX_JUDGE_RESPONSE_CHARS = 8000   # cap the transcript handed to the judge
+MAX_TOOL_OUTPUT_CHARS = 2000      # cap any single tool output within it
+
+
+def _truncate_middle(text: str, limit: int) -> str:
+    """Trim to `limit` chars keeping the head and tail, so a long transcript
+    still shows both the code at the top and the conclusion at the bottom."""
+    if len(text) <= limit:
+        return text
+    head = limit * 2 // 3
+    tail = limit - head
+    return text[:head] + "\n…[transcript truncated]…\n" + text[-tail:]
+
+
+def build_judge_response(result: dict) -> str:
+    """Render what the judge should evaluate.
+
+    For tool-using (agentic) tasks the real work — the code and its execution
+    output — lives in `result["trajectory"]`, not in `final_response`. Walk the
+    trajectory in order and emit a labeled transcript: the assistant's text, the
+    code it executed, and the output each execution produced. When a task used no
+    tools (e.g. a pure extraction answer), the answer is fully contained in
+    `final_response`, so return that unchanged.
+    """
+    trajectory = result.get("trajectory") or []
+    final_response = (result.get("final_response") or "").strip()
+
+    has_tool_use = any(
+        b.get("type") == "tool_use"
+        for entry in trajectory
+        for b in entry.get("blocks", [])
+    )
+    if not has_tool_use:
+        return final_response
+
+    parts: list[str] = []
+    for entry in trajectory:
+        for b in entry.get("blocks", []):
+            btype = b.get("type")
+            if btype == "text":
+                txt = (b.get("text") or "").strip()
+                if txt:
+                    parts.append(txt)
+            elif btype == "tool_use":
+                inp = b.get("input") or {}
+                code = inp.get("code") if isinstance(inp, dict) else None
+                if code:
+                    parts.append(f"[executed code]\n```python\n{code.strip()}\n```")
+                else:
+                    parts.append(f"[tool call: {b.get('name', 'tool')}] "
+                                 f"{json.dumps(inp)[:MAX_TOOL_OUTPUT_CHARS]}")
+            elif btype == "tool_result":
+                out = str(b.get("result", "")).strip()
+                if len(out) > MAX_TOOL_OUTPUT_CHARS:
+                    out = out[:MAX_TOOL_OUTPUT_CHARS] + "\n…[output truncated]…"
+                parts.append(f"[execution output]\n{out}")
+
+    body = "\n\n".join(parts)
+    # The final answer is the last end_turn text, already included above; add it
+    # back explicitly only if it somehow isn't present (e.g. an empty last turn).
+    if final_response and final_response not in body:
+        parts.append(f"[final answer]\n{final_response}")
+        body = "\n\n".join(parts)
+    return body.strip() or final_response
+
+
+def _extract_judge_json(text: str):
+    """Parse the judge's JSON verdict, tolerant of code fences and any
+    preamble/postamble prose around it. Returns a dict, or None if nothing
+    parseable is found."""
+    if not text:
+        return None
+    candidates = [text]
+    stripped = re.sub(r'```(?:json)?|```', '', text).strip()
+    if stripped and stripped != text:
+        candidates.append(stripped)
+    m = re.search(r'\{[\s\S]*\}', text)   # first '{' … last '}'
+    if m:
+        candidates.append(m.group(0))
+    for c in candidates:
+        try:
+            obj = json.loads(c)
+            if isinstance(obj, dict):
+                return obj
+        except Exception:
+            continue
+    return None
+
+
 def llm_judge(
     task_prompt: str,
     context: Optional[str],
@@ -61,7 +157,12 @@ def llm_judge(
     if context:
         parts.append(f"**Context/Data provided:**\n```\n{context[:2000]}\n```")
     parts.append(f"**Scoring rubric:**\n{rubric}")
-    parts.append(f"**AI response to evaluate:**\n{response[:4000]}")
+    parts.append(
+        "**AI response / execution transcript to evaluate:**\n"
+        "(For tool-using tasks this includes the code the assistant executed and the "
+        "output it produced — judge the code and its results, not just the prose.)\n"
+        f"{_truncate_middle(response, MAX_JUDGE_RESPONSE_CHARS)}"
+    )
 
     judge_prompt = "\n\n".join(parts)
 
@@ -92,28 +193,29 @@ def llm_judge(
 
     raw_text = result.text.strip()
 
-    # Parse JSON response
-    try:
-        # Strip any accidental markdown fences
-        clean = re.sub(r'```(?:json)?|```', '', raw_text).strip()
-        judgment = json.loads(clean)
-        score = int(judgment.get("score", 0))
-        score = max(0, min(4, score))   # clamp to 0–4
-        judgment["score"] = score
-        judgment["normalized"] = round(score / 4.0, 4)
-        judgment["method"] = "llm_judge"
-        judgment.update(judge_meta)
-        return judgment
-    except Exception as e:
+    # Parse the judge's JSON verdict (tolerant of fences / surrounding prose).
+    judgment = _extract_judge_json(raw_text)
+    if judgment is None:
         return {
             "score": 0,
             "normalized": 0.0,
             "method": "llm_judge",
-            "reasoning": f"Judge parse error: {str(e)}",
+            "reasoning": "Judge parse error: no JSON object found in judge output",
             "key_issues": ["parse_error"],
             "raw": raw_text,
             **judge_meta,
         }
+
+    try:
+        score = int(round(float(judgment.get("score", 0))))
+    except (TypeError, ValueError):
+        score = 0
+    score = max(0, min(4, score))   # clamp to 0–4
+    judgment["score"] = score
+    judgment["normalized"] = round(score / 4.0, 4)
+    judgment["method"] = "llm_judge"
+    judgment.update(judge_meta)
+    return judgment
 
 
 def score_pending_judge_tasks(
@@ -148,7 +250,7 @@ def score_pending_judge_tasks(
         judgment = llm_judge(
             task_prompt=task["prompt"],
             context=task.get("context"),
-            response=result.get("final_response", ""),
+            response=build_judge_response(result),
             rubric=task["rubric"]
         )
 
@@ -236,7 +338,7 @@ if __name__ == "__main__":
     judgment = llm_judge(
         task_prompt=task["prompt"],
         context=task.get("context"),
-        response=result.get("final_response", ""),
+        response=build_judge_response(result),
         rubric=task["rubric"]
     )
     print(json.dumps(judgment, indent=2))
