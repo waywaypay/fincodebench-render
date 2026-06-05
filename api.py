@@ -332,30 +332,31 @@ def list_provider_models(
     x_provider_api_key: Optional[str] = Header(default=None),
     x_anthropic_api_key: Optional[str] = Header(default=None),
 ):
-    """Live model catalogue for a provider, fetched from its /models endpoint
-    using the caller's own key (bring-your-own-key). The key is used only for
-    this lookup and never stored. Falls back to the registry's static
-    suggestions if the provider's listing can't be reached."""
+    """Model catalogue for a provider. With the caller's own key (in the
+    X-Provider-Api-Key header, used only for this lookup and never stored), it
+    returns the provider's full live /models list. Without a key it returns the
+    full list anyway for providers whose /models is public (e.g. OpenRouter),
+    otherwise the registry's static suggestions. Always 200 with a `source` of
+    "live" or "static" so the dashboard can populate the dropdown regardless."""
     try:
         name, cfg = providers.resolve_provider(provider)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
     api_key = (x_provider_api_key or x_anthropic_api_key or "").strip()
-    if not api_key:
-        raise HTTPException(
-            status_code=401,
-            detail=f"Send your {cfg['label']} API key in the X-Provider-Api-Key "
-                   f"header to list its models.",
-        )
 
-    try:
-        models = providers.ChatClient(name, api_key).list_models()
-        return {"provider": name, "models": models, "source": "live"}
-    except Exception as e:
-        # Degrade gracefully — the dashboard still has the static suggestions.
-        return {"provider": name, "models": cfg["models"], "source": "static",
-                "error": str(e)}
+    # Fetch live when we have a key, or when the provider's listing is public.
+    if api_key or cfg.get("public_models"):
+        try:
+            models = providers.ChatClient(name, api_key or "public").list_models()
+            if models:
+                return {"provider": name, "models": models, "source": "live"}
+        except Exception as e:
+            # Degrade gracefully — the dashboard still has the static suggestions.
+            return {"provider": name, "models": cfg["models"], "source": "static",
+                    "error": str(e)}
+
+    return {"provider": name, "models": cfg["models"], "source": "static"}
 
 
 # ── Dashboard (public, read-only) ─────────────────────────────────────────────

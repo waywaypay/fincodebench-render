@@ -59,9 +59,22 @@ def test_provider_models_live(client):
     assert d["models"] == ["model-a", "model-b"]
 
 
-def test_provider_models_requires_key(client):
+def test_provider_models_no_key_returns_static(client):
+    # Key-required provider with no key → static suggestions (still 200).
     r = client.get("/providers/openai/models")
-    assert r.status_code == 401
+    assert r.status_code == 200
+    d = r.json()
+    assert d["source"] == "static"
+    assert d["models"] == providers.PROVIDERS["openai"]["models"]
+
+
+def test_provider_models_public_loads_without_key(client):
+    # OpenRouter's /models is public → full live list with no key.
+    r = client.get("/providers/openrouter/models")
+    assert r.status_code == 200
+    d = r.json()
+    assert d["source"] == "live"
+    assert d["models"] == ["model-a", "model-b"]
 
 
 def test_provider_models_unknown_provider(client):

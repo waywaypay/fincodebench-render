@@ -42,7 +42,10 @@ PROVIDERS = {
         "key_hint": "sk-…",
         "default_model": "gpt-4o-mini",
         "default_judge_model": "gpt-4o",
-        "models": ["gpt-4o", "gpt-4o-mini", "gpt-4.1", "gpt-4.1-mini", "o4-mini"],
+        "models": [
+            "gpt-5", "gpt-4o", "gpt-4o-mini", "gpt-4.1", "gpt-4.1-mini",
+            "gpt-4.1-nano", "o3", "o4-mini", "o3-mini", "gpt-4-turbo", "gpt-3.5-turbo",
+        ],
         "docs": "https://platform.openai.com/api-keys",
     },
     "openrouter": {
@@ -51,14 +54,16 @@ PROVIDERS = {
         "base_url": "https://openrouter.ai/api/v1",
         "key_env": "OPENROUTER_API_KEY",
         "key_hint": "sk-or-…",
+        "public_models": True,   # /models is public — full list loads without a key
         "default_model": "openai/gpt-4o-mini",
         "default_judge_model": "openai/gpt-4o",
         "models": [
-            "openai/gpt-4o-mini",
-            "anthropic/claude-3.5-sonnet",
-            "google/gemini-2.0-flash-001",
-            "meta-llama/llama-3.3-70b-instruct",
-            "deepseek/deepseek-chat",
+            "openai/gpt-4o", "openai/gpt-4o-mini", "openai/o3",
+            "anthropic/claude-opus-4-8", "anthropic/claude-sonnet-4-6",
+            "google/gemini-2.5-pro", "google/gemini-2.0-flash-001",
+            "meta-llama/llama-3.3-70b-instruct", "deepseek/deepseek-chat",
+            "deepseek/deepseek-r1", "qwen/qwen-2.5-72b-instruct",
+            "mistralai/mistral-large",
         ],
         "docs": "https://openrouter.ai/keys",
     },
@@ -83,7 +88,11 @@ PROVIDERS = {
         "key_hint": "sk-…",
         "default_model": "qwen-plus",
         "default_judge_model": "qwen-max",
-        "models": ["qwen-max", "qwen-plus", "qwen-turbo", "qwen2.5-72b-instruct"],
+        "models": [
+            "qwen-max", "qwen-plus", "qwen-turbo", "qwen-long",
+            "qwen2.5-72b-instruct", "qwen2.5-32b-instruct", "qwen2.5-14b-instruct",
+            "qwen2.5-7b-instruct", "qwen2.5-coder-32b-instruct", "qwq-32b-preview",
+        ],
         "docs": "https://bailian.console.alibabacloud.com/?apiKey=1",
     },
     "kimi": {
@@ -96,10 +105,9 @@ PROVIDERS = {
         "default_model": "moonshot-v1-8k",
         "default_judge_model": "moonshot-v1-32k",
         "models": [
-            "moonshot-v1-8k",
-            "moonshot-v1-32k",
-            "moonshot-v1-128k",
-            "kimi-k2-0711-preview",
+            "moonshot-v1-8k", "moonshot-v1-32k", "moonshot-v1-128k",
+            "moonshot-v1-auto", "kimi-k2-0711-preview", "kimi-latest",
+            "kimi-thinking-preview",
         ],
         "docs": "https://platform.moonshot.ai/console/api-keys",
     },
@@ -116,12 +124,14 @@ PROVIDERS = {
         "models": [
             "llama-3.3-70b",
             "llama-3.1-405b",
+            "llama-3.2-3b",
             "qwen3-235b",
             "qwen3-4b",
             "qwen-2.5-qwq-32b",
             "mistral-31-24b",
             "deepseek-r1-671b",
             "venice-uncensored",
+            "dolphin-2.9.2-qwen2-72b",
         ],
         "docs": "https://venice.ai/settings/api",
     },
@@ -157,6 +167,7 @@ def public_registry():
             "default_model": cfg["default_model"],
             "default_judge_model": cfg["default_judge_model"],
             "models": cfg["models"],
+            "public_models": cfg.get("public_models", False),
             "docs": cfg.get("docs"),
         }
         for name, cfg in PROVIDERS.items()

@@ -25,8 +25,18 @@ def test_registry_and_resolution():
 
 def test_public_registry_is_secrets_free():
     for p in providers.public_registry():
-        assert {"name", "label", "key_hint", "default_model", "default_judge_model", "models"} <= set(p)
+        assert {"name", "label", "key_hint", "default_model", "default_judge_model",
+                "models", "public_models"} <= set(p)
         assert "api_key" not in p and "key_env" not in p  # never leak the env var name/secret
+
+
+def test_openrouter_marked_public_and_lists_are_substantial():
+    reg = {p["name"]: p for p in providers.public_registry()}
+    assert reg["openrouter"]["public_models"] is True
+    assert reg["anthropic"]["public_models"] is False
+    # Static suggestions should be more than a token handful for big catalogues.
+    for name in ("openai", "qwen", "kimi", "venice"):
+        assert len(reg[name]["models"]) >= 7, name
 
 
 def test_openai_tool_loop_translation():
