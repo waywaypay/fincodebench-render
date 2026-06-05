@@ -268,6 +268,12 @@
   .run-row.clickable:hover{background:var(--tint)}
   .run-row.active{background:var(--panel)}
   .run-row.active td:first-child{box-shadow:inset 3px 0 0 var(--ink)}
+  /* the open run is collapsible — a chevron on its row signals expand/collapse */
+  .run-row.clickable .run-when{display:inline-flex;align-items:center;gap:7px}
+  .run-row.active .run-when::before{content:"▾";color:var(--faint);font-size:9px;
+    font-weight:400;line-height:1;transform:translateY(.5px)}
+  .run-row.active.collapsed .run-when::before{content:"▸"}
+  #resultsBody.collapsed{display:none}
   .run-when{font-weight:600;color:var(--ink);font-size:13.5px}
   .run-id{font-size:11px;color:var(--faint);margin-top:2px}
   .runs-table .small{font-size:12.5px;color:var(--muted)}
@@ -440,7 +446,7 @@
 </div></footer>
 
 <script>
-const STATE = {tasks:[], runs:[], providers:[], selectedRun:null, catColors:{
+const STATE = {tasks:[], runs:[], providers:[], selectedRun:null, resultsCollapsed:false, catColors:{
   extraction:'#5b7c99', code_generation:'#7d6794', computation:'#5f7e55',
   agentic:'#a6793f', debug:'#a85a4f'}};
 const CAT_DESC = {
@@ -711,19 +717,34 @@ function renderRunsTable(){
   }
 }
 function selectRun(id){
+  if(STATE.selectedRun===id){            // clicking the already-open run toggles its detail
+    STATE.resultsCollapsed=!STATE.resultsCollapsed;
+    applyResultsCollapse();
+    return;
+  }
   STATE.selectedRun=id;
+  STATE.resultsCollapsed=false;          // a freshly opened run starts expanded
   highlightRow(id);
   loadRun(id);
 }
+function applyResultsCollapse(){
+  $('#resultsBody').classList.toggle('collapsed', STATE.resultsCollapsed);
+  highlightRow(STATE.selectedRun);
+}
 function highlightRow(id){
-  document.querySelectorAll('.run-row').forEach(tr=>
-    tr.classList.toggle('active', tr.dataset.runId===id));
+  document.querySelectorAll('.run-row').forEach(tr=>{
+    const sel=tr.dataset.runId===id;
+    tr.classList.toggle('active', sel);
+    tr.classList.toggle('collapsed', sel && STATE.resultsCollapsed);
+    if(sel) tr.setAttribute('aria-expanded', String(!STATE.resultsCollapsed));
+    else tr.removeAttribute('aria-expanded');
+  });
 }
 $('#refreshRuns').onclick=async()=>{
   const d=await (await fetch('dashboard/data')).json(); setRuns(d.runs); renderRunsTable();
 };
 async function loadRun(id){
-  const body=$('#resultsBody'); body.innerHTML='<div class="empty">Loading…</div>';
+  const body=$('#resultsBody'); body.classList.remove('collapsed'); body.innerHTML='<div class="empty">Loading…</div>';
   let rep=null;
   try{
     const res=await fetch('dashboard/runs/'+encodeURIComponent(id));
