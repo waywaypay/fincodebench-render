@@ -17,6 +17,12 @@ services:
       - key: DATA_DIR
         value: /data        # persistent disk mount point
 
+      - key: FINCODEBENCH_MODEL
+        value: claude-haiku-4-5    # runner model — cheap default; change here or in dashboard
+
+      - key: FINCODEBENCH_JUDGE_MODEL
+        value: claude-sonnet-4-5   # judge model for agentic tasks (kept distinct from runner)
+
     disk:
       name: fincodebench-data
       mountPath: /data

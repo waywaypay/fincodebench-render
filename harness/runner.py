@@ -14,7 +14,7 @@ from typing import Optional
 import anthropic
 
 # ── Config ──────────────────────────────────────────────────────────────────
-MODEL = "claude-opus-4-5"          # swap to claude-sonnet-4-5 for speed/cost
+MODEL = os.environ.get("FINCODEBENCH_MODEL", "claude-haiku-4-5")  # override via FINCODEBENCH_MODEL
 MAX_TOKENS = 4096
 RESULTS_DIR = Path("results")
 TASKS_FILE = Path("tasks/tasks.json")

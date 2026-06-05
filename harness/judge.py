@@ -9,13 +9,14 @@ Key design choices:
 """
 
 import json
+import os
 import re
 from typing import Optional
 import anthropic
 
 client = anthropic.Anthropic()
 
-JUDGE_MODEL = "claude-sonnet-4-5"      # Intentionally different from runner model
+JUDGE_MODEL = os.environ.get("FINCODEBENCH_JUDGE_MODEL", "claude-sonnet-4-5")  # kept distinct from runner to avoid self-grading; override via FINCODEBENCH_JUDGE_MODEL
 
 JUDGE_SYSTEM = """You are an expert judge evaluating AI assistant responses to financial analysis and coding tasks.
 
