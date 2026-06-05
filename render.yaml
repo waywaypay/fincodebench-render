@@ -22,8 +22,18 @@ services:
       - key: FINCODEBENCH_API_KEY
         sync: false         # optional — gates the destructive DELETE/tasks only; /runs is bring-your-own-key
 
+      # Durable run history. Two options:
+      #   • Persistent disk (paid plans): keep DATA_DIR + the disk block below.
+      #   • Free tier (no disks): leave the disk off and set DATABASE_URL to any
+      #     Postgres connection string (Neon/Supabase free tiers are durable;
+      #     Render's own free Postgres works too but expires). Runs then persist
+      #     in the DB and survive restarts/spin-downs. Without either, runs are
+      #     ephemeral and the browser still keeps your own runs locally.
       - key: DATA_DIR
-        value: /data        # persistent disk mount point
+        value: /data        # persistent disk mount point (paid plans)
+
+      - key: DATABASE_URL
+        sync: false         # optional — postgres://… for durable storage on free tier
 
       - key: FINCODEBENCH_MODEL
         sync: false         # optional — runner model override; defaults to the provider's default model
