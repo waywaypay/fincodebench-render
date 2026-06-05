@@ -602,7 +602,13 @@ async function poll(id,st,btn){
     STATE.runs=d.runs||[];
     const r=STATE.runs.find(x=>x.run_id===id);
     if(!r){st.textContent='Run not found.';break;}
-    st.textContent=`Status: ${r.status}…`;
+    let lbl=`Status: ${r.status}…`;
+    const p=r.progress;
+    if(p && r.status==='running' && p.total){
+      const phase=p.phase==='judging'?'Judging':p.phase==='scoring'?'Scoring':'Running';
+      lbl=`${phase} ${p.done}/${p.total}${p.current?' · '+p.current:''}…`;
+    }
+    st.textContent=lbl;
     if(r.status==='completed'){st.textContent='Completed ✓';renderRunSelector();$('#runSelect').value=id;loadRun(id);break;}
     if(r.status==='failed'){st.textContent='Run failed — '+esc(r.error||'see server logs');break;}
   }
