@@ -45,6 +45,73 @@ def verify_key(x_api_key: Optional[str] = Header(default=None)):
         raise HTTPException(status_code=401, detail="Invalid API key")
 
 
+# ── Anthropic error handling ──────────────────────────────────────────────────
+# Bring-your-own-key runs fail for boring, fixable reasons — most often an invalid
+# key or a key with no credits. The raw SDK exception ("Error code: 400 - {...your
+# credit balance is too low...}") is opaque to a dashboard user, so map the known
+# cases to a clear HTTP status + actionable message. Billing is the awkward one:
+# "credit balance is too low" comes back as a 400 invalid_request_error (and
+# occasionally a 403 billing_error), so it can't be told apart by HTTP status
+# alone — inspect the message/type, not just the exception class.
+def classify_anthropic_error(exc: Exception) -> tuple[int, str]:
+    """Map an Anthropic SDK exception to (http_status, human_message)."""
+    # `.message` is the clean inner message on APIStatusError subclasses; for
+    # everything else fall back to str(exc).
+    message = str(getattr(exc, "message", "") or exc)
+    err_type = getattr(exc, "type", None)  # "invalid_request_error", "billing_error", ...
+    low = message.lower()
+
+    if err_type == "billing_error" or "credit balance" in low:
+        return 402, (
+            "The Anthropic API key you provided has insufficient credits. Add "
+            "credits at https://console.anthropic.com/settings/billing, then "
+            "start the run again."
+        )
+    if isinstance(exc, anthropic.AuthenticationError):
+        return 401, (
+            "The Anthropic API key is invalid or has been revoked. It should "
+            "start with 'sk-ant-' — double-check it and try again."
+        )
+    if isinstance(exc, anthropic.PermissionDeniedError):
+        return 403, f"This Anthropic API key lacks permission for the requested model. {message}"
+    if isinstance(exc, anthropic.NotFoundError):
+        return 404, f"The requested model isn't available to this key. {message}"
+    if isinstance(exc, anthropic.RateLimitError):
+        return 429, "The Anthropic API rate limit was hit. Wait a moment, then start the run again."
+    if isinstance(exc, anthropic.APIConnectionError):
+        return 502, "Could not reach the Anthropic API. Check connectivity and try again."
+    if isinstance(exc, anthropic.APIStatusError):
+        status = exc.status_code or 502
+        # 529 overloaded / 5xx server errors are transient — tell the caller to retry.
+        # (OverloadedError isn't re-exported at the top level in every SDK version,
+        #  so classify by status/type rather than by the exception class.)
+        if status == 529 or err_type == "overloaded_error":
+            return 503, "The Anthropic API is temporarily overloaded. Try again in a few moments."
+        if status >= 500:
+            return 503, "The Anthropic API is temporarily unavailable. Try again in a few moments."
+        return status, f"Anthropic API error {status}: {message}"
+    # Not an Anthropic API error — surface the message without leaking a stack trace.
+    return 500, f"Run failed: {message}"
+
+
+def _validate_anthropic_key(api_key: str, model: str) -> None:
+    """Fail fast before queuing a long run: a 1-token completion verifies the
+    caller's key is valid and funded. A free count_tokens call would NOT surface
+    the 'credit balance is too low' billing error, so use a real (tiny) call.
+    The key is used transiently here and never stored. Raises HTTPException with
+    a clear status + message on any failure; returns None on success."""
+    probe = anthropic.Anthropic(api_key=api_key, max_retries=0, timeout=20.0)
+    try:
+        probe.messages.create(
+            model=model,
+            max_tokens=1,
+            messages=[{"role": "user", "content": "ping"}],
+        )
+    except Exception as exc:
+        status, message = classify_anthropic_error(exc)
+        raise HTTPException(status_code=status, detail=message)
+
+
 # ── In-memory run registry (survives restarts via JSON on disk) ───────────────
 def _load_registry() -> dict:
     path = RESULTS_DIR / "registry.json"
@@ -139,10 +206,14 @@ def _execute_run(run_id: str, task_ids: Optional[list], categories: Optional[lis
             _save_registry(reg)
 
     except Exception as e:
+        # Store a clean, actionable message (e.g. credits ran out mid-run, or a
+        # rate limit / overload) rather than the raw SDK repr the dashboard would
+        # otherwise show verbatim.
+        _, message = classify_anthropic_error(e)
         with registry_lock:
             reg = _load_registry()
             reg[run_id]["status"] = "failed"
-            reg[run_id]["error"] = str(e)
+            reg[run_id]["error"] = message
             _save_registry(reg)
         raise
     finally:
@@ -268,6 +339,13 @@ def create_run(
                    "X-Anthropic-Api-Key header (sk-ant-...).",
         )
     req.validate_categories()
+
+    # Fail fast: verify the key is valid and funded before queuing a long run, so
+    # the caller gets an immediate, clear error instead of a run that silently
+    # flips to "failed" with an opaque SDK string after polling. Probe the same
+    # model the runner will use, so a key without access to it is caught too.
+    import runner as runner_mod
+    _validate_anthropic_key(anthropic_api_key, runner_mod.MODEL)
 
     run_id = datetime.utcnow().strftime("%Y%m%d_%H%M%S") + "_" + str(uuid.uuid4())[:8]
 

@@ -589,7 +589,12 @@ $('#runBtn').onclick=async()=>{
   try{
     const headers={'Content-Type':'application/json','X-Anthropic-Api-Key':key};
     const res=await fetch('runs',{method:'POST',headers,body:JSON.stringify(payload)});
-    if(!res.ok){st.textContent='Error '+res.status+': '+esc(await res.text());btn.disabled=false;return;}
+    if(!res.ok){
+      // FastAPI returns errors as {"detail": "..."} — surface that message, not the JSON wrapper.
+      const body=await res.text(); let msg=body;
+      try{ const j=JSON.parse(body); if(j&&j.detail) msg=j.detail; }catch{}
+      st.textContent=esc(msg||('Error '+res.status)); btn.disabled=false; return;
+    }
     const {run_id}=await res.json();
     st.textContent='Queued '+run_id+' — polling…';
     poll(run_id,st,btn);
