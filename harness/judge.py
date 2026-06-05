@@ -12,15 +12,18 @@ import json
 import os
 import re
 from typing import Optional, Callable
-import anthropic
 
+import providers
 from pricing import compute_cost
 
-# Overridden per run by the web service with the caller's own key (BYOK); fall
-# back to a placeholder so a missing ANTHROPIC_API_KEY can't break import.
-client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY") or "placeholder")
+# Overridden per run by the web service with the caller's own key + provider
+# (BYOK); falls back to a placeholder key so a missing env key can't break import.
+_PROVIDER, _PROVIDER_CFG = providers.resolve_provider(os.environ.get("FINCODEBENCH_PROVIDER"))
+client = providers.client_from_env(_PROVIDER)
 
-JUDGE_MODEL = os.environ.get("FINCODEBENCH_JUDGE_MODEL", "claude-sonnet-4-5")  # kept distinct from runner to avoid self-grading; override via FINCODEBENCH_JUDGE_MODEL
+# Kept distinct from the runner model to avoid self-grading; defaults to the
+# provider's judge model. Override via FINCODEBENCH_JUDGE_MODEL.
+JUDGE_MODEL = os.environ.get("FINCODEBENCH_JUDGE_MODEL") or _PROVIDER_CFG["default_judge_model"]
 
 JUDGE_SYSTEM = """You are an expert judge evaluating AI assistant responses to financial analysis and coding tasks.
 
@@ -62,7 +65,7 @@ def llm_judge(
 
     judge_prompt = "\n\n".join(parts)
 
-    result = client.messages.create(
+    result = client.create(
         model=JUDGE_MODEL,
         max_tokens=400,
         system=JUDGE_SYSTEM,
@@ -87,7 +90,7 @@ def llm_judge(
         )
     judge_meta = {"judge_model": JUDGE_MODEL, "judge_usage": judge_usage, "judge_cost_usd": judge_cost}
 
-    raw_text = result.content[0].text.strip()
+    raw_text = result.text.strip()
 
     # Parse JSON response
     try:

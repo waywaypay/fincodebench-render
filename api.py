@@ -13,7 +13,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-import anthropic
 from fastapi import FastAPI, BackgroundTasks, HTTPException, Header, Query
 from fastapi.responses import JSONResponse, FileResponse
 from pydantic import BaseModel
@@ -27,8 +26,10 @@ RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 STATIC_DIR = Path(__file__).parent / "static"
 TASKS_FILE = Path(__file__).parent / "tasks" / "tasks.json"
 
-# Add harness to path
+# Add harness to path, then load the provider registry (bring-your-own-key for
+# Anthropic, OpenAI, OpenRouter, DeepSeek, Qwen, Kimi, Venice, …).
 sys.path.insert(0, str(Path(__file__).parent / "harness"))
+import providers
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
 # Strip whitespace: a secret pasted into a hosting dashboard (e.g. Render) very
@@ -130,9 +131,9 @@ registry_lock = threading.Lock()
 
 # ── Run execution (background thread) ─────────────────────────────────────────
 def _execute_run(run_id: str, task_ids: Optional[list], categories: Optional[list],
-                 anthropic_api_key: str):
+                 provider: str, api_key: str, model: str, judge_model: str):
     """Runs the full eval pipeline in a background thread on the visitor's own
-    Anthropic key (bring-your-own-key). Updates registry on completion."""
+    provider + key (bring-your-own-key). Updates registry on completion."""
     from runner import run_benchmark
     from scorer import score_task
     from judge import score_pending_judge_tasks
@@ -149,19 +150,26 @@ def _execute_run(run_id: str, task_ids: Optional[list], categories: Optional[lis
         _save_registry(reg)
 
     try:
-        # Override module globals so the runner writes to run_dir and every
-        # Anthropic call uses the visitor's key, not the server's (restored below).
+        # Override module globals so the runner writes to run_dir and every model
+        # call uses the visitor's provider/key/model, not the server's (restored
+        # in finally). A single client serves both runner and judge.
         import runner as runner_mod
         import judge as judge_mod
         import eval as eval_mod
         original_results = runner_mod.RESULTS_DIR
         original_runner_client = runner_mod.client
         original_judge_client = judge_mod.client
+        original_model = runner_mod.MODEL
+        original_provider = runner_mod.PROVIDER
+        original_judge_model = judge_mod.JUDGE_MODEL
         runner_mod.RESULTS_DIR = run_dir
         eval_mod.RESULTS_DIR = run_dir
-        run_client = anthropic.Anthropic(api_key=anthropic_api_key)
+        run_client = providers.ChatClient(provider, api_key)
         runner_mod.client = run_client
         judge_mod.client = run_client
+        runner_mod.PROVIDER = provider
+        runner_mod.MODEL = model
+        judge_mod.JUDGE_MODEL = judge_model
 
         # Live progress: write phase/counter to the registry so the dashboard
         # can show "Running 12/28 · agentic-003" instead of a bare "running".
@@ -241,6 +249,9 @@ def _execute_run(run_id: str, task_ids: Optional[list], categories: Optional[lis
         eval_mod.RESULTS_DIR = original_results
         runner_mod.client = original_runner_client
         judge_mod.client = original_judge_client
+        runner_mod.MODEL = original_model
+        runner_mod.PROVIDER = original_provider
+        judge_mod.JUDGE_MODEL = original_judge_model
 
 
 # ── FastAPI app ───────────────────────────────────────────────────────────────
@@ -276,6 +287,9 @@ VALID_CATEGORIES = {"extraction", "code_generation", "computation", "agentic", "
 class RunRequest(BaseModel):
     task_ids: Optional[list[str]] = None
     categories: Optional[list[str]] = None
+    provider: Optional[str] = None      # anthropic (default), openai, openrouter, deepseek, qwen, kimi, venice
+    model: Optional[str] = None         # runner model override (defaults to provider's)
+    judge_model: Optional[str] = None   # judge model override (defaults to provider's)
 
     def validate_categories(self):
         if self.categories:
@@ -288,6 +302,14 @@ class RunRequest(BaseModel):
 @app.get("/health")
 def health():
     return {"status": "ok", "timestamp": datetime.utcnow().isoformat()}
+
+
+@app.get("/providers")
+def list_providers():
+    """Public, secrets-free registry of supported model providers — name, label,
+    key hint, default models, and where to get a key. Drives the dashboard's
+    bring-your-own-key selector."""
+    return {"providers": providers.public_registry()}
 
 
 # ── Dashboard (public, read-only) ─────────────────────────────────────────────
@@ -306,7 +328,7 @@ def dashboard_data():
     Public payload for the dashboard: the full task set plus a summary of all
     runs. No secrets and no trajectories — safe to serve without the API key so
     the methodology, tasks, and result charts are publicly viewable. POST /runs
-    is bring-your-own-key (the caller supplies their own Anthropic key); the
+    is bring-your-own-key (the caller supplies their own provider key); the
     destructive DELETE stays gated by FINCODEBENCH_API_KEY.
     """
     with open(TASKS_FILE) as f:
@@ -314,7 +336,7 @@ def dashboard_data():
     with registry_lock:
         reg = _load_registry()
     runs = sorted(reg.values(), key=lambda r: r.get("created_at", ""), reverse=True)
-    return {"tasks": tasks, "runs": runs}
+    return {"tasks": tasks, "runs": runs, "providers": providers.public_registry()}
 
 
 @app.get("/dashboard/runs/{run_id}")
@@ -361,26 +383,42 @@ def list_tasks(
 def create_run(
     req: RunRequest,
     background_tasks: BackgroundTasks,
+    x_provider_api_key: Optional[str] = Header(default=None),
     x_anthropic_api_key: Optional[str] = Header(default=None),
 ):
     """
-    Trigger a new eval run on the caller's own Anthropic key (bring-your-own-key).
-    The key is supplied via the X-Anthropic-Api-Key header, used for every model
-    call in the run, billed to the caller, and never stored or logged. Returns
-    run_id immediately; execution is async. Poll GET /runs/{run_id} for status.
+    Trigger a new eval run on the caller's own provider + key (bring-your-own-key).
+
+    The provider is chosen in the request body (`provider`: anthropic [default],
+    openai, openrouter, deepseek, qwen, kimi, venice). The key is supplied via
+    the X-Provider-Api-Key header (X-Anthropic-Api-Key still works for Anthropic),
+    used for every model call in the run, billed to the caller, and never stored
+    or logged. Optionally override `model` / `judge_model`; otherwise the
+    provider's defaults are used. Returns run_id immediately; execution is async.
+    Poll GET /runs/{run_id} for status.
     """
-    anthropic_api_key = (x_anthropic_api_key or "").strip()
-    if not anthropic_api_key:
+    # Validate provider and resolve per-provider model defaults.
+    try:
+        provider, cfg = providers.resolve_provider(req.provider)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    api_key = (x_provider_api_key or x_anthropic_api_key or "").strip()
+    if not api_key:
         raise HTTPException(
             status_code=401,
-            detail="Bring your own Anthropic API key: send it in the "
-                   "X-Anthropic-Api-Key header (sk-ant-...).",
+            detail=f"Bring your own {cfg['label']} API key ({cfg['key_hint']}): "
+                   f"send it in the X-Provider-Api-Key header.",
         )
     req.validate_categories()
 
+    model = (req.model or "").strip() or cfg["default_model"]
+    judge_model = (req.judge_model or "").strip() or cfg["default_judge_model"]
+
     run_id = datetime.utcnow().strftime("%Y%m%d_%H%M%S") + "_" + str(uuid.uuid4())[:8]
 
-    # Register (the Anthropic key is deliberately never written to the registry)
+    # Register (the API key is deliberately never written to the registry; the
+    # provider/model are, so the dashboard can show what each run used).
     with registry_lock:
         reg = _load_registry()
         reg[run_id] = {
@@ -389,6 +427,9 @@ def create_run(
             "created_at": datetime.utcnow().isoformat(),
             "task_ids": req.task_ids,
             "categories": req.categories,
+            "provider": provider,
+            "model": model,
+            "judge_model": judge_model,
         }
         _save_registry(reg)
 
@@ -398,12 +439,17 @@ def create_run(
         run_id=run_id,
         task_ids=req.task_ids,
         categories=req.categories,
-        anthropic_api_key=anthropic_api_key,
+        provider=provider,
+        api_key=api_key,
+        model=model,
+        judge_model=judge_model,
     )
 
     return {
         "run_id": run_id,
         "status": "queued",
+        "provider": provider,
+        "model": model,
         "poll_url": f"/runs/{run_id}"
     }
 
