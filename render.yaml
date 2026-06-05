@@ -9,10 +9,10 @@ services:
 
     envVars:
       - key: ANTHROPIC_API_KEY
-        sync: false         # set manually in Render dashboard — never commit this
+        sync: false         # optional — dashboard runs are bring-your-own-key; only the harness CLI uses this
 
       - key: FINCODEBENCH_API_KEY
-        sync: false         # your own API key to protect the /runs endpoints
+        sync: false         # optional — gates the destructive DELETE/tasks only; /runs is bring-your-own-key
 
       - key: DATA_DIR
         value: /data        # persistent disk mount point

@@ -347,9 +347,10 @@
 
   <details class="card trigger">
     <summary>Trigger a new run</summary>
-    <p class="note" style="margin-top:12px">Runs execute asynchronously on the server using the configured model. The
-    <code>POST /runs</code> endpoint is protected — supply <code>FINCODEBENCH_API_KEY</code> if one is set (leave blank
-    if not). The key is kept only in this browser tab.</p>
+    <p class="note" style="margin-top:12px">Runs execute asynchronously on the server using the configured model.
+    <strong>Bring your own key:</strong> each run uses <em>your</em> Anthropic API key and is billed to your account.
+    Paste your key (<code>sk-ant-…</code>) below — it is sent only with your run request, never stored on the server,
+    and kept only in this browser tab.</p>
     <div class="filters" style="margin-top:12px">
       <select id="runScope">
         <option value="all">All tasks</option>
@@ -360,7 +361,7 @@
         <option value="debug">Category: debug</option>
       </select>
       <input id="runTask" placeholder="…or a single task id e.g. codegen-001" style="flex:1">
-      <input id="runKey" type="password" placeholder="X-API-Key (optional)">
+      <input id="runKey" type="password" placeholder="Your Anthropic API key (sk-ant-…)">
       <button class="btn" id="runBtn">Run</button>
     </div>
     <div id="runStatus" class="note"></div>
@@ -494,7 +495,7 @@ function renderRunSelector(){
         <span class="note">Trigger one below, or from a shell:</span>
         <pre style="text-align:left;max-width:560px;margin:14px auto 0">curl -X POST &lt;url&gt;/runs \\
   -H 'Content-Type: application/json' \\
-  -H 'X-API-Key: &lt;key&gt;' \\
+  -H 'X-Anthropic-Api-Key: sk-ant-...' \\
   -d '{"task_ids":["codegen-001"]}'</pre></div>`;
     return;
   }
@@ -582,10 +583,11 @@ function chartCard(title, items){
 $('#runBtn').onclick=async()=>{
   const scope=$('#runScope').value, taskId=$('#runTask').value.trim(), key=$('#runKey').value.trim();
   const st=$('#runStatus'); const btn=$('#runBtn');
+  if(!key){ st.textContent='Enter your Anthropic API key (sk-ant-…) — each run uses your own key.'; return; }
   const payload = taskId ? {task_ids:[taskId]} : (scope==='all'?{}:{categories:[scope]});
   btn.disabled=true; st.textContent='Submitting…';
   try{
-    const headers={'Content-Type':'application/json'}; if(key) headers['X-API-Key']=key;
+    const headers={'Content-Type':'application/json','X-Anthropic-Api-Key':key};
     const res=await fetch('runs',{method:'POST',headers,body:JSON.stringify(payload)});
     if(!res.ok){st.textContent='Error '+res.status+': '+esc(await res.text());btn.disabled=false;return;}
     const {run_id}=await res.json();
