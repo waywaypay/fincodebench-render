@@ -86,12 +86,20 @@ def run_full_eval(
 
 
 def generate_report(results: list, tasks: dict) -> dict:
-    """Aggregate scores into summary statistics."""
+    """Aggregate scores, cost, and latency into summary statistics."""
 
     by_category = {}
     by_difficulty = {}
     all_scores = []
     task_scores = []
+
+    runner_models = set()
+    judge_models = set()
+    runner_cost_total = 0.0
+    judge_cost_total = 0.0
+    cost_known = False
+    total_elapsed = 0.0
+    elapsed_n = 0
 
     for result in results:
         task = tasks.get(result["task_id"])
@@ -123,6 +131,29 @@ def generate_report(results: list, tasks: dict) -> dict:
             by_difficulty[diff].append(normalized)
             all_scores.append(normalized)
 
+        # ── cost (runner + judge) and latency ────────────────────────────────
+        model = result.get("model")
+        if model:
+            runner_models.add(model)
+        runner_cost = result.get("cost_usd")
+        judge_cost = sr.get("judge_cost_usd")
+        if sr.get("judge_model"):
+            judge_models.add(sr["judge_model"])
+        if runner_cost is not None:
+            runner_cost_total += runner_cost
+            cost_known = True
+        if judge_cost is not None:
+            judge_cost_total += judge_cost
+            cost_known = True
+        task_cost = None
+        if runner_cost is not None or judge_cost is not None:
+            task_cost = round((runner_cost or 0.0) + (judge_cost or 0.0), 6)
+
+        elapsed = result.get("elapsed_seconds")
+        if elapsed is not None:
+            total_elapsed += elapsed
+            elapsed_n += 1
+
         task_scores.append({
             "task_id": result["task_id"],
             "category": cat,
@@ -130,7 +161,10 @@ def generate_report(results: list, tasks: dict) -> dict:
             "score": normalized,
             "method": method,
             "turns": result.get("turns", 0),
-            "elapsed": result.get("elapsed_seconds"),
+            "elapsed": elapsed,
+            "cost": task_cost,
+            "model": model,
+            "tokens": result.get("usage"),
             "reasoning": sr.get("reasoning") if method == "llm_judge" else None
         })
 
@@ -138,12 +172,22 @@ def generate_report(results: list, tasks: dict) -> dict:
     def pass_rate(lst, threshold=0.75): return round(sum(1 for x in lst if x >= threshold) / len(lst), 4) if lst else None
 
     return {
-        "model": "see runner.py MODEL",
+        "model": ", ".join(sorted(runner_models)) if runner_models else "unknown",
+        "judge_model": ", ".join(sorted(judge_models)) if judge_models else None,
         "timestamp": datetime.utcnow().isoformat(),
         "n_tasks": len(results),
         "overall": {
             "mean_score": avg(all_scores),
             "pass_rate_75": pass_rate(all_scores),
+        },
+        "cost_usd": {
+            "total": round(runner_cost_total + judge_cost_total, 6) if cost_known else None,
+            "runner": round(runner_cost_total, 6) if cost_known else None,
+            "judge": round(judge_cost_total, 6) if cost_known else None,
+        },
+        "latency_seconds": {
+            "total": round(total_elapsed, 2),
+            "mean": round(total_elapsed / elapsed_n, 2) if elapsed_n else None,
         },
         "by_category": {k: {"mean": avg(v), "n": len(v), "pass_rate": pass_rate(v)} for k, v in by_category.items()},
         "by_difficulty": {k: {"mean": avg(v), "n": len(v)} for k, v in by_difficulty.items()},
@@ -158,6 +202,11 @@ def print_report(report: dict):
     print(f"{'='*60}")
     overall = report["overall"]
     print(f"Tasks: {report['n_tasks']}  |  Mean score: {overall['mean_score']}  |  Pass rate (≥0.75): {overall['pass_rate_75']}")
+
+    cost = report.get("cost_usd") or {}
+    lat = report.get("latency_seconds") or {}
+    if cost.get("total") is not None:
+        print(f"Model: {report.get('model')}  |  Cost: ${cost['total']:.4f}  |  Latency: {lat.get('total')}s")
 
     print(f"\nBy Category:")
     for cat, stats in sorted(report["by_category"].items()):
