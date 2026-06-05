@@ -5,6 +5,7 @@ FastAPI web service for triggering and retrieving eval runs on Render.
 
 import json
 import os
+import secrets
 import sys
 import threading
 import uuid
@@ -29,10 +30,17 @@ TASKS_FILE = Path(__file__).parent / "tasks" / "tasks.json"
 sys.path.insert(0, str(Path(__file__).parent / "harness"))
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
-API_KEY = os.environ.get("FINCODEBENCH_API_KEY", "")
+# Strip whitespace: a secret pasted into a hosting dashboard (e.g. Render) very
+# often picks up a trailing newline or space, which would otherwise make every
+# key compare unequal even when the user typed the right value.
+API_KEY = os.environ.get("FINCODEBENCH_API_KEY", "").strip()
 
 def verify_key(x_api_key: Optional[str] = Header(default=None)):
-    if API_KEY and x_api_key != API_KEY:
+    if not API_KEY:
+        return  # auth disabled — no key configured on the server
+    provided = (x_api_key or "").strip()
+    # Constant-time compare to avoid leaking the key via timing.
+    if not secrets.compare_digest(provided.encode("utf-8"), API_KEY.encode("utf-8")):
         raise HTTPException(status_code=401, detail="Invalid API key")
 
 
