@@ -14,6 +14,8 @@ import re
 from typing import Optional, Callable
 import anthropic
 
+from pricing import compute_cost
+
 # Overridden per run by the web service with the caller's own key (BYOK); fall
 # back to a placeholder so a missing ANTHROPIC_API_KEY can't break import.
 client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY") or "placeholder")
@@ -67,6 +69,24 @@ def llm_judge(
         messages=[{"role": "user", "content": judge_prompt}]
     )
 
+    # Judge calls cost money too — track usage/cost so the run total includes them
+    u = getattr(result, "usage", None)
+    judge_usage = None
+    judge_cost = None
+    if u is not None:
+        judge_usage = {
+            "input_tokens": getattr(u, "input_tokens", 0) or 0,
+            "output_tokens": getattr(u, "output_tokens", 0) or 0,
+            "cache_creation_input_tokens": getattr(u, "cache_creation_input_tokens", 0) or 0,
+            "cache_read_input_tokens": getattr(u, "cache_read_input_tokens", 0) or 0,
+        }
+        judge_cost = compute_cost(
+            JUDGE_MODEL,
+            judge_usage["input_tokens"], judge_usage["output_tokens"],
+            judge_usage["cache_creation_input_tokens"], judge_usage["cache_read_input_tokens"],
+        )
+    judge_meta = {"judge_model": JUDGE_MODEL, "judge_usage": judge_usage, "judge_cost_usd": judge_cost}
+
     raw_text = result.content[0].text.strip()
 
     # Parse JSON response
@@ -79,6 +99,7 @@ def llm_judge(
         judgment["score"] = score
         judgment["normalized"] = round(score / 4.0, 4)
         judgment["method"] = "llm_judge"
+        judgment.update(judge_meta)
         return judgment
     except Exception as e:
         return {
@@ -87,7 +108,8 @@ def llm_judge(
             "method": "llm_judge",
             "reasoning": f"Judge parse error: {str(e)}",
             "key_issues": ["parse_error"],
-            "raw": raw_text
+            "raw": raw_text,
+            **judge_meta,
         }
 
 

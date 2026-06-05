@@ -216,6 +216,24 @@
   .scorebar{display:inline-block;width:70px;height:8px;border-radius:5px;background:var(--panel);
     overflow:hidden;vertical-align:middle;margin-right:9px;border:1px solid var(--border)}
   .scorebar i{display:block;height:100%;border-radius:5px}
+
+  /* runs table — clickable list of all runs */
+  .runs-card{padding:0;overflow:hidden}
+  .runs-table{font-size:14px}
+  .runs-table th{padding:13px 16px}
+  .runs-table td{padding:13px 16px;vertical-align:middle}
+  .runs-table tbody tr{transition:background .12s ease}
+  .run-row.clickable{cursor:pointer}
+  .run-row.clickable:hover{background:var(--tint)}
+  .run-row.active{background:var(--panel)}
+  .run-row.active td:first-child{box-shadow:inset 3px 0 0 var(--ink)}
+  .run-when{font-weight:600;color:var(--ink);font-size:13.5px}
+  .run-id{font-size:11px;color:var(--faint);margin-top:2px}
+  .runs-table .small{font-size:12.5px;color:var(--muted)}
+  .badge.st-completed{background:#e9efe6;color:#4d6346;border-color:#dae2d4}
+  .badge.st-running{background:#f4ecdd;color:#7b5d36;border-color:#eaddc7}
+  .badge.st-queued{background:var(--panel);color:#5d5a50;border-color:#e5e1d7}
+  .badge.st-failed{background:#f3e7e3;color:#7d4a42;border-color:#e9d4cd}
   .trigger{margin-top:22px}
   .trigger summary{cursor:pointer;font-weight:600;letter-spacing:-.005em;color:var(--ink)}
   .trigger summary::-webkit-details-marker{color:var(--faint)}
@@ -339,10 +357,11 @@
   <span class="eyebrow">Benchmark runs</span>
   <h1>Results</h1>
   <div class="runbar">
-    <label>Run</label>
-    <select id="runSelect"></select>
+    <label>All runs</label>
     <button class="btn ghost" id="refreshRuns">Refresh</button>
   </div>
+  <p class="note" style="margin:0 0 4px">Each run shows its model, cost, and latency. Click a completed run to drill into its per-task results.</p>
+  <div id="runsTableWrap"></div>
   <div id="resultsBody"></div>
 
   <details class="card trigger">
@@ -375,7 +394,7 @@
 </div></footer>
 
 <script>
-const STATE = {tasks:[], runs:[], catColors:{
+const STATE = {tasks:[], runs:[], selectedRun:null, catColors:{
   extraction:'#5b7c99', code_generation:'#7d6794', computation:'#5f7e55',
   agentic:'#a6793f', debug:'#a85a4f'}};
 const CAT_DESC = {
@@ -389,6 +408,19 @@ const el = (t,c,h)=>{const e=document.createElement(t);if(c)e.className=c;if(h!=
 const esc = s => (s==null?'':String(s)).replace(/[&<>]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[m]));
 const scoreColor = v => v==null?'var(--gray)':v<0.5?'var(--red)':v<0.75?'var(--amber)':'var(--green)';
 const pct = v => v==null?'—':Math.round(v*100)+'%';
+const fmtCost = v => v==null?'—':(v===0?'$0.00':(v<0.01?'$'+v.toFixed(4):'$'+v.toFixed(2)));
+const fmtDuration = s => {
+  if(s==null) return '—';
+  if(s<60) return (Math.round(s*10)/10)+'s';
+  const m=Math.floor(s/60), sec=Math.round(s%60);
+  return sec?`${m}m ${sec}s`:`${m}m`;
+};
+const fmtWhen = iso => {
+  if(!iso) return '—';
+  const d=new Date(iso);
+  if(isNaN(d.getTime())) return String(iso).slice(0,16).replace('T',' ');
+  return d.toLocaleString(undefined,{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+};
 
 // nav
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
@@ -402,7 +434,7 @@ async function init(){
   try{
     const d = await (await fetch('dashboard/data')).json();
     STATE.tasks = d.tasks||[]; STATE.runs = d.runs||[];
-    renderOverview(); renderTasks(); renderRunSelector();
+    renderOverview(); renderTasks(); renderRunsTable();
   }catch(e){ $('#resultsBody').innerHTML='<div class="empty">Failed to load data: '+esc(e.message)+'</div>'; }
 }
 
@@ -485,13 +517,21 @@ function targetHtml(t){
 }
 
 // ---------- results ----------
-function renderRunSelector(){
-  const sel=$('#runSelect'); sel.innerHTML='';
-  const done=STATE.runs.filter(r=>r.status==='completed');
-  if(!done.length){
-    sel.innerHTML='<option>— no completed runs —</option>';
+function statusBadge(r){
+  const s=r.status||'unknown';
+  let label=s;
+  if(s==='running' && r.progress && r.progress.total){
+    label=`running ${r.progress.done}/${r.progress.total}`;
+  }
+  return `<span class="badge st-${esc(s)}">${esc(label)}</span>`;
+}
+function renderRunsTable(){
+  const wrap=$('#runsTableWrap');
+  const runs=STATE.runs.slice();
+  if(!runs.length){
+    wrap.innerHTML='';
     $('#resultsBody').innerHTML=
-      `<div class="card empty">No completed runs yet.<br><br>
+      `<div class="card empty">No runs yet.<br><br>
         <span class="note">Trigger one below, or from a shell:</span>
         <pre style="text-align:left;max-width:560px;margin:14px auto 0">curl -X POST &lt;url&gt;/runs \\
   -H 'Content-Type: application/json' \\
@@ -499,14 +539,51 @@ function renderRunSelector(){
   -d '{"task_ids":["codegen-001"]}'</pre></div>`;
     return;
   }
-  done.forEach(r=>{const o=el('option');o.value=r.run_id;
-    o.textContent=`${r.run_id.slice(0,15)} · ${r.n_tasks||'?'} tasks · mean ${r.mean_score!=null?Math.round(r.mean_score*100)+'%':'—'}`;
-    sel.append(o);});
-  sel.onchange=()=>loadRun(sel.value);
-  loadRun(done[0].run_id);
+  const card=el('div','card runs-card');
+  card.innerHTML='<table class="runs-table"><thead><tr>'+
+    '<th>Run</th><th>Model</th><th>Status</th><th>Tasks</th>'+
+    '<th>Mean</th><th>pass@.75</th><th>Cost</th><th>Latency</th></tr></thead><tbody></tbody></table>';
+  const tb=card.querySelector('tbody');
+  runs.forEach(r=>{
+    const done=r.status==='completed';
+    const tr=el('tr','run-row'+(done?' clickable':''));
+    if(done) tr.dataset.runId=r.run_id;
+    tr.innerHTML=
+      `<td><div class="run-when">${esc(fmtWhen(r.created_at))}</div>
+           <div class="run-id mono">${esc(r.run_id.slice(0,15))}</div></td>
+       <td class="mono small">${esc(r.model||'—')}</td>
+       <td>${statusBadge(r)}</td>
+       <td>${r.n_tasks??'—'}</td>
+       <td>${r.mean_score!=null?pct(r.mean_score):'—'}</td>
+       <td>${r.pass_rate!=null?pct(r.pass_rate):'—'}</td>
+       <td class="mono">${fmtCost(r.cost_usd)}</td>
+       <td class="mono">${fmtDuration(r.elapsed_seconds)}</td>`;
+    if(done) tr.onclick=()=>selectRun(r.run_id);
+    tb.append(tr);
+  });
+  wrap.innerHTML=''; wrap.append(card);
+
+  // Keep the current selection if it's still a completed run; otherwise
+  // auto-open the most recent completed run so details are visible by default.
+  if(STATE.selectedRun && runs.some(r=>r.run_id===STATE.selectedRun && r.status==='completed')){
+    highlightRow(STATE.selectedRun);
+  } else {
+    const firstDone=runs.find(r=>r.status==='completed');
+    if(firstDone){ selectRun(firstDone.run_id); }
+    else { $('#resultsBody').innerHTML='<div class="empty">No completed runs yet — trigger one below.</div>'; }
+  }
+}
+function selectRun(id){
+  STATE.selectedRun=id;
+  highlightRow(id);
+  loadRun(id);
+}
+function highlightRow(id){
+  document.querySelectorAll('.run-row').forEach(tr=>
+    tr.classList.toggle('active', tr.dataset.runId===id));
 }
 $('#refreshRuns').onclick=async()=>{
-  const d=await (await fetch('dashboard/data')).json(); STATE.runs=d.runs||[]; renderRunSelector();
+  const d=await (await fetch('dashboard/data')).json(); STATE.runs=d.runs||[]; renderRunsTable();
 };
 async function loadRun(id){
   const body=$('#resultsBody'); body.innerHTML='<div class="empty">Loading…</div>';
@@ -517,13 +594,22 @@ async function loadRun(id){
 }
 function renderReport(rep){
   const body=$('#resultsBody'); body.innerHTML='';
-  const ov=rep.overall||{};
+  const ov=rep.overall||{}; const cost=rep.cost_usd||{}; const lat=rep.latency_seconds||{};
   const stats=[['Mean score',pct(ov.mean_score)],['pass@0.75',pct(ov.pass_rate_75)],
-    ['Tasks',rep.n_tasks??'—'],['Model',rep.model||'—']];
-  const sg=el('div','grid cols-4'); stats.forEach(([l,v])=>{
+    ['Tasks',rep.n_tasks??'—'],['Model',rep.model||'—'],
+    ['Total cost',fmtCost(cost.total)],['Total latency',fmtDuration(lat.total)]];
+  const sg=el('div','grid cols-3'); stats.forEach(([l,v])=>{
     const sm=String(v).length>9?' sm':'';
     const c=el('div','card');c.innerHTML=`<div class="statbig${sm}">${esc(v)}</div><div class="statlabel">${l}</div>`;sg.append(c);});
   body.append(sg);
+
+  // model + cost/latency breakdown line
+  const bits=[];
+  if(rep.model) bits.push(`Runner <b>${esc(rep.model)}</b>`);
+  if(rep.judge_model) bits.push(`Judge <b>${esc(rep.judge_model)}</b>`);
+  if(cost.total!=null) bits.push(`cost = runner ${fmtCost(cost.runner)} + judge ${fmtCost(cost.judge)}`);
+  if(lat.mean!=null) bits.push(`mean ${fmtDuration(lat.mean)}/task`);
+  if(bits.length) body.append(el('p','note',bits.join(' · ')));
 
   // mean by category
   const catItems=Object.entries(rep.by_category||{}).map(([k,v])=>({label:k,value:v.mean,n:v.n,color:STATE.catColors[k]}));
@@ -554,13 +640,15 @@ function renderReport(rep){
   // detailed table
   const tcard=el('div','card');
   const rows=(rep.task_scores||[]).slice().sort((a,b)=>(a.score??-1)-(b.score??-1));
-  tcard.innerHTML='<table><thead><tr><th>Task</th><th>Category</th><th>Diff</th><th>Method</th><th>Turns</th><th style="width:160px">Score</th></tr></thead><tbody>'+
+  tcard.innerHTML='<table><thead><tr><th>Task</th><th>Category</th><th>Diff</th><th>Method</th><th>Turns</th><th>Latency</th><th>Cost</th><th style="width:150px">Score</th></tr></thead><tbody>'+
     rows.map(t=>`<tr>
       <td class="mono">${esc(t.task_id)}</td>
       <td><span class="badge cat cat-${esc(t.category)}">${esc(t.category)}</span></td>
       <td><span class="badge ${esc(t.difficulty)}">${esc(t.difficulty)}</span></td>
       <td><span class="badge method">${esc(t.method)}</span></td>
       <td>${t.turns??'—'}</td>
+      <td class="mono">${fmtDuration(t.elapsed)}</td>
+      <td class="mono">${fmtCost(t.cost)}</td>
       <td><span class="scorebar"><i style="width:${t.score!=null?Math.round(t.score*100):0}%;background:${scoreColor(t.score)}"></i></span>${pct(t.score)}</td>
     </tr>`).join('')+'</tbody></table>';
   body.append(tcard);
@@ -600,6 +688,7 @@ async function poll(id,st,btn){
     await new Promise(r=>setTimeout(r,3000));
     let d; try{ d=await (await fetch('dashboard/data')).json(); }catch{ continue; }
     STATE.runs=d.runs||[];
+    renderRunsTable();
     const r=STATE.runs.find(x=>x.run_id===id);
     if(!r){st.textContent='Run not found.';break;}
     let lbl=`Status: ${r.status}…`;
@@ -609,7 +698,7 @@ async function poll(id,st,btn){
       lbl=`${phase} ${p.done}/${p.total}${p.current?' · '+p.current:''}…`;
     }
     st.textContent=lbl;
-    if(r.status==='completed'){st.textContent='Completed ✓';renderRunSelector();$('#runSelect').value=id;loadRun(id);break;}
+    if(r.status==='completed'){st.textContent='Completed ✓';renderRunsTable();selectRun(id);break;}
     if(r.status==='failed'){st.textContent='Run failed — '+esc(r.error||'see server logs');break;}
   }
   btn.disabled=false;
