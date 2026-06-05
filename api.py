@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import FastAPI, BackgroundTasks, HTTPException, Header, Query
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 from pydantic import BaseModel
 
 # ── Path setup ────────────────────────────────────────────────────────────────
@@ -21,6 +21,9 @@ from pydantic import BaseModel
 DATA_DIR = Path(os.environ.get("DATA_DIR", "./data"))
 RESULTS_DIR = DATA_DIR / "results"
 RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+
+STATIC_DIR = Path(__file__).parent / "static"
+TASKS_FILE = Path(__file__).parent / "tasks" / "tasks.json"
 
 # Add harness to path
 sys.path.insert(0, str(Path(__file__).parent / "harness"))
@@ -156,6 +159,41 @@ class RunRequest(BaseModel):
 @app.get("/health")
 def health():
     return {"status": "ok", "timestamp": datetime.utcnow().isoformat()}
+
+
+# ── Dashboard (public, read-only) ─────────────────────────────────────────────
+@app.get("/", include_in_schema=False)
+def dashboard_index():
+    """Serve the single-page methodology + results dashboard."""
+    index = STATIC_DIR / "index.html"
+    if not index.exists():
+        raise HTTPException(404, "Dashboard not built")
+    return FileResponse(index)
+
+
+@app.get("/dashboard/data")
+def dashboard_data():
+    """
+    Public payload for the dashboard: the full task set plus a summary of all
+    runs. No secrets and no trajectories — safe to serve without the API key so
+    the methodology, tasks, and result charts are publicly viewable. The costly
+    POST /runs and destructive DELETE stay protected by FINCODEBENCH_API_KEY.
+    """
+    with open(TASKS_FILE) as f:
+        tasks = json.load(f)
+    with registry_lock:
+        reg = _load_registry()
+    runs = sorted(reg.values(), key=lambda r: r.get("created_at", ""), reverse=True)
+    return {"tasks": tasks, "runs": runs}
+
+
+@app.get("/dashboard/runs/{run_id}")
+def dashboard_run_report(run_id: str):
+    """Public aggregate report (scores only) for one completed run."""
+    report_path = RESULTS_DIR / run_id / "report.json"
+    if not report_path.exists():
+        raise HTTPException(404, f"No report for run {run_id}")
+    return json.loads(report_path.read_text())
 
 
 @app.get("/tasks")
