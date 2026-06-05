@@ -166,6 +166,31 @@ def test_usage_is_carried_and_mapped():
     assert r3.usage.input_tokens == 0 and r3.usage.output_tokens == 0
 
 
+def test_list_models_openai_page_shape():
+    # OpenAI SDK returns a page object with `.data`
+    c = providers.ChatClient("openai", "k")
+    page = SimpleNamespace(data=[SimpleNamespace(id="gpt-4o-mini"), SimpleNamespace(id="gpt-4o")])
+    c._client = SimpleNamespace(models=SimpleNamespace(list=lambda: page))
+    assert c.list_models() == ["gpt-4o", "gpt-4o-mini"]  # sorted
+
+
+def test_list_models_iterable_shape():
+    # Anthropic's page object is iterable with no `.data` attribute on a plain list
+    c = providers.ChatClient("anthropic", "k")
+    models = [SimpleNamespace(id="claude-opus-4-8"), SimpleNamespace(id="claude-haiku-4-5")]
+    c._client = SimpleNamespace(models=SimpleNamespace(list=lambda: models))
+    assert c.list_models() == ["claude-haiku-4-5", "claude-opus-4-8"]  # sorted
+
+
+def test_anthropic_models_are_current():
+    # Guard against the stale lineup the dashboard previously showed.
+    anthropic_models = providers.PROVIDERS["anthropic"]["models"]
+    assert "claude-opus-4-8" in anthropic_models
+    assert "claude-sonnet-4-6" in anthropic_models
+    assert "claude-opus-4-5" not in anthropic_models  # superseded
+    assert providers.PROVIDERS["anthropic"]["default_judge_model"] == "claude-sonnet-4-6"
+
+
 def test_anthropic_system_passthrough():
     captured = []
 

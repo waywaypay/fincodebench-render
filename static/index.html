@@ -384,8 +384,10 @@
       <input id="runModel" list="modelList" placeholder="Model (provider default)">
       <datalist id="modelList"></datalist>
       <input id="runKey" type="password" placeholder="Your API key">
+      <button class="btn ghost" id="loadModelsBtn" type="button" title="Fetch this provider's full model list using your key">↻ Models</button>
       <button class="btn" id="runBtn">Run</button>
     </div>
+    <div id="modelNote" class="note" style="margin-top:8px"></div>
     <div id="runStatus" class="note"></div>
   </details>
 </section>
@@ -457,14 +459,36 @@ function currentProvider(){
   const name=$('#runProvider').value;
   return STATE.providers.find(p=>p.name===name)||STATE.providers[0];
 }
+function fillModels(list){
+  const dl=$('#modelList'); dl.innerHTML='';
+  (list||[]).forEach(m=>{const o=el('option');o.value=m;dl.append(o);});
+}
 function applyProvider(){
   const p=currentProvider(); if(!p) return;
   $('#runKey').placeholder=`Your ${p.label} API key (${p.key_hint||'…'})`;
   $('#runModel').placeholder=`Model (default ${p.default_model||'—'})`;
   $('#runModel').value='';
-  const dl=$('#modelList'); dl.innerHTML='';
-  (p.models||[]).forEach(m=>{const o=el('option');o.value=m;dl.append(o);});
+  $('#modelNote').textContent='';
+  fillModels(p.models);  // static suggestions until a key fetches the live list
   const docs=$('#provDocs'); if(docs){ docs.href=p.docs||'#'; docs.style.display=p.docs?'':'none'; }
+  if($('#runKey').value.trim()) loadModels();  // refresh live list for the new provider
+}
+// Fetch the provider's full live model catalogue using the caller's key.
+async function loadModels(){
+  const p=currentProvider(), key=$('#runKey').value.trim(), note=$('#modelNote');
+  if(!p) return;
+  if(!key){ note.textContent='Enter your API key, then ↻ Models to load the full list.'; return; }
+  note.textContent='Loading models…';
+  try{
+    const res=await fetch('providers/'+encodeURIComponent(p.name)+'/models',
+      {headers:{'X-Provider-Api-Key':key}});
+    if(!res.ok){ note.textContent='Couldn’t load models ('+res.status+') — showing defaults.'; fillModels(p.models); return; }
+    const d=await res.json();
+    fillModels(d.models);
+    note.textContent = d.source==='live'
+      ? `${(d.models||[]).length} ${p.label} models available — type to filter.`
+      : 'Live list unavailable — showing defaults.';
+  }catch(e){ note.textContent='Couldn’t load models — showing defaults.'; fillModels(p.models); }
 }
 
 // ---------- methodology ----------
@@ -736,6 +760,10 @@ async function poll(id,st,btn){
   }
   btn.disabled=false;
 }
+
+$('#loadModelsBtn').onclick=loadModels;
+// Auto-load the live model list once a key is entered (fires on blur after edit).
+$('#runKey').addEventListener('change',()=>{ if($('#runKey').value.trim()) loadModels(); });
 
 init();
 </script>

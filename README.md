@@ -149,7 +149,7 @@ into actionable observations.
 Template:
 
 ```
-## Results — claude-opus-4-5 — [date]
+## Results — claude-opus-4-8 — [date]
 
 Overall pass rate: XX%
 Strongest category: [category] (XX%)
