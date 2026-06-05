@@ -94,6 +94,7 @@ def generate_report(results: list, tasks: dict) -> dict:
     task_scores = []
 
     runner_models = set()
+    runner_providers = set()
     judge_models = set()
     runner_cost_total = 0.0
     judge_cost_total = 0.0
@@ -135,6 +136,8 @@ def generate_report(results: list, tasks: dict) -> dict:
         model = result.get("model")
         if model:
             runner_models.add(model)
+        if result.get("provider"):
+            runner_providers.add(result["provider"])
         runner_cost = result.get("cost_usd")
         judge_cost = sr.get("judge_cost_usd")
         if sr.get("judge_model"):
@@ -173,6 +176,7 @@ def generate_report(results: list, tasks: dict) -> dict:
 
     return {
         "model": ", ".join(sorted(runner_models)) if runner_models else "unknown",
+        "provider": ", ".join(sorted(runner_providers)) if runner_providers else None,
         "judge_model": ", ".join(sorted(judge_models)) if judge_models else None,
         "timestamp": datetime.utcnow().isoformat(),
         "n_tasks": len(results),
