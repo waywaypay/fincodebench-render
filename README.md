@@ -233,12 +233,36 @@ curl <url>/providers
 
 ---
 
+## Deployment & run history
+
+The Results table needs durable storage to survive restarts and redeploys.
+Three tiers, in order of preference:
+
+1. **Postgres (recommended — works on any host, including Render's free tier
+   where persistent disks aren't available).** Set `DATABASE_URL` to any
+   Postgres connection string; runs are stored in the database, survive
+   restarts/spin-downs, and are shared across browsers. Durable free options:
+   **Neon** or **Supabase**. (Render's own free Postgres works too but expires
+   after a trial window.) No `DATABASE_URL` → this tier is skipped.
+2. **Persistent disk (paid plans).** Keep `DATA_DIR=/data` and mount a disk
+   there (see `render.yaml`). Runs are stored as JSON files and self-heal into
+   the index on boot.
+3. **Browser cache (always on).** Completed runs are mirrored to the visitor's
+   `localStorage`, so your own runs stay visible even when the server has no
+   durable storage — but they aren't shared across devices or users.
+
+With neither (1) nor (2), the server treats run data as ephemeral and logs a
+warning on boot; only the browser cache keeps runs visible.
+
+---
+
 ## Dependencies
 
 - `anthropic` — Claude API SDK (Anthropic provider)
 - `openai` — OpenAI SDK, also used for every OpenAI-compatible provider
   (OpenAI, OpenRouter, DeepSeek, Qwen, Kimi, Venice) via a custom base URL
 - `fastapi` + `uvicorn` — the web service
+- `psycopg` — optional Postgres run storage (used only when `DATABASE_URL` is set)
 - `python3` in PATH — for functional test execution
 - Standard library only otherwise (json, subprocess, re, pathlib)
 

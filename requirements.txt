@@ -3,3 +3,4 @@ openai>=1.40.0          # OpenAI-compatible providers (OpenAI, OpenRouter, DeepS
 fastapi>=0.115.0
 uvicorn[standard]>=0.32.0
 pydantic>=2.0.0
+psycopg[binary]>=3.1     # optional Postgres run storage (set DATABASE_URL); falls back to disk

@@ -117,22 +117,178 @@ def _heal_registry(reg: dict) -> dict:
         reg[run_id] = entry
     return reg
 
-def _load_registry() -> dict:
-    path = RESULTS_DIR / "registry.json"
-    reg = {}
-    if path.exists():
+# ── Storage backends ──────────────────────────────────────────────────────────
+# Default: JSON files on the local disk (durable only with a persistent disk).
+# If DATABASE_URL is set, runs live in Postgres instead — durable across restarts
+# and shared across browsers, and the right choice on hosts without a persistent
+# disk (e.g. Render's free tier). Both backends are interchangeable behind the
+# _load_registry / _save_registry / _STORE.* calls the rest of the app uses.
+DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
+
+
+class _DiskBackend:
+    """Run storage on the local filesystem. Self-heals the index from the run
+    folders and writes it atomically."""
+
+    kind = "disk"
+
+    def load_registry(self) -> dict:
+        path = RESULTS_DIR / "registry.json"
+        reg = {}
+        if path.exists():
+            try:
+                reg = json.loads(path.read_text())
+            except Exception:
+                reg = {}  # corrupted — rebuilt from run folders below
+        return _heal_registry(reg)
+
+    def save_registry(self, registry: dict):
+        # Atomic write so a crash/restart mid-write can't corrupt the index.
+        path = RESULTS_DIR / "registry.json"
+        tmp = path.with_name("registry.json.tmp")
+        tmp.write_text(json.dumps(registry, indent=2))
+        os.replace(tmp, path)
+
+    def get_report(self, run_id: str):
+        p = RESULTS_DIR / run_id / "report.json"
+        return json.loads(p.read_text()) if p.exists() else None
+
+    def put_report(self, run_id: str, report: dict):
+        d = RESULTS_DIR / run_id
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "report.json").write_text(json.dumps(report, indent=2))
+
+    def get_results(self, run_id: str):
+        p = RESULTS_DIR / run_id / "all_results.json"
+        return json.loads(p.read_text()) if p.exists() else None
+
+    def put_results(self, run_id: str, results: list):
+        d = RESULTS_DIR / run_id
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "all_results.json").write_text(json.dumps(results, indent=2))
+
+    def delete_run(self, run_id: str):
+        import shutil
+        d = RESULTS_DIR / run_id
+        if d.exists():
+            shutil.rmtree(d)
+
+    def startup(self):
+        if not os.environ.get("DATA_DIR"):
+            print(
+                "WARNING: DATA_DIR is not set — writing runs to ephemeral './data'. "
+                "Run history will be LOST on every redeploy/restart. Attach a "
+                "persistent disk and set DATA_DIR (e.g. /data), or set DATABASE_URL "
+                "to a Postgres database for durable storage (works on Render free)."
+            )
+        else:
+            print(f"Run storage: disk ({RESULTS_DIR.resolve()})")
+        with registry_lock:                      # persist any runs recovered from disk
+            self.save_registry(self.load_registry())
+
+
+class _PgBackend:
+    """Run storage in Postgres (DATABASE_URL). One row per run holds the index
+    entry plus the report and per-task results as JSONB — durable across restarts
+    and shared across browsers. A short-lived connection is opened per call, so
+    it's safe to use from the background run thread (psycopg connections are not
+    shareable across threads)."""
+
+    kind = "postgres"
+
+    def __init__(self, dsn: str):
+        import psycopg
+        from psycopg.types.json import Json
+        self._psycopg = psycopg
+        self._Json = Json
+        self._dsn = dsn
+        with self._psycopg.connect(self._dsn) as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS runs (
+                    run_id      TEXT PRIMARY KEY,
+                    created_at  TEXT,
+                    meta        JSONB NOT NULL DEFAULT '{}'::jsonb,
+                    report      JSONB,
+                    results     JSONB,
+                    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+                )
+                """
+            )
+
+    def load_registry(self) -> dict:
+        with self._psycopg.connect(self._dsn) as conn, conn.cursor() as cur:
+            cur.execute("SELECT run_id, meta FROM runs")
+            return {run_id: meta for run_id, meta in cur.fetchall()}
+
+    def save_registry(self, registry: dict):
+        # Upsert each entry's index metadata (report/results columns untouched).
+        # Deletions are handled explicitly by delete_run, so no global wipe here.
+        with self._psycopg.connect(self._dsn) as conn, conn.cursor() as cur:
+            for run_id, meta in registry.items():
+                cur.execute(
+                    """
+                    INSERT INTO runs (run_id, created_at, meta, updated_at)
+                    VALUES (%s, %s, %s, now())
+                    ON CONFLICT (run_id) DO UPDATE
+                        SET meta = EXCLUDED.meta,
+                            created_at = EXCLUDED.created_at,
+                            updated_at = now()
+                    """,
+                    (run_id, meta.get("created_at"), self._Json(meta)),
+                )
+
+    def _get_col(self, run_id, col):
+        with self._psycopg.connect(self._dsn) as conn, conn.cursor() as cur:
+            cur.execute(f"SELECT {col} FROM runs WHERE run_id = %s", (run_id,))
+            row = cur.fetchone()
+            return row[0] if row else None
+
+    def get_report(self, run_id): return self._get_col(run_id, "report")
+    def get_results(self, run_id): return self._get_col(run_id, "results")
+
+    def _put_col(self, run_id, col, value):
+        with self._psycopg.connect(self._dsn) as conn, conn.cursor() as cur:
+            cur.execute(
+                f"""
+                INSERT INTO runs (run_id, {col}, updated_at)
+                VALUES (%s, %s, now())
+                ON CONFLICT (run_id) DO UPDATE SET {col} = EXCLUDED.{col}, updated_at = now()
+                """,
+                (run_id, self._Json(value)),
+            )
+
+    def put_report(self, run_id, report): self._put_col(run_id, "report", report)
+    def put_results(self, run_id, results): self._put_col(run_id, "results", results)
+
+    def delete_run(self, run_id):
+        with self._psycopg.connect(self._dsn) as conn, conn.cursor() as cur:
+            cur.execute("DELETE FROM runs WHERE run_id = %s", (run_id,))
+
+    def startup(self):
+        print("Run storage: Postgres (DATABASE_URL) — durable across restarts.")
+
+
+def _make_store():
+    if DATABASE_URL:
         try:
-            reg = json.loads(path.read_text())
-        except Exception:
-            reg = {}  # corrupted — rebuilt from run folders below
-    return _heal_registry(reg)
+            store = _PgBackend(DATABASE_URL)
+            print("Initialized Postgres run storage from DATABASE_URL.")
+            return store
+        except Exception as e:
+            print(f"WARNING: DATABASE_URL is set but Postgres init failed ({e}). "
+                  f"Falling back to disk storage — runs may not persist.")
+    return _DiskBackend()
+
+
+_STORE = _make_store()
+
+
+def _load_registry() -> dict:
+    return _STORE.load_registry()
 
 def _save_registry(registry: dict):
-    # Write atomically so a crash/restart mid-write can't corrupt the registry.
-    path = RESULTS_DIR / "registry.json"
-    tmp = path.with_name("registry.json.tmp")
-    tmp.write_text(json.dumps(registry, indent=2))
-    os.replace(tmp, path)
+    _STORE.save_registry(registry)
 
 registry_lock = threading.Lock()
 
@@ -219,14 +375,11 @@ def _execute_run(run_id: str, task_ids: Optional[list], categories: Optional[lis
             progress_callback=_progress("judging"),
         )
 
-        # Generate report
+        # Generate report and persist it + the per-task results via the store
+        # (disk files, or Postgres rows when DATABASE_URL is set).
         report = generate_report(results, tasks_map)
-        report_path = run_dir / "report.json"
-        report_path.write_text(json.dumps(report, indent=2))
-
-        # Save all results
-        all_results_path = run_dir / "all_results.json"
-        all_results_path.write_text(json.dumps(results, indent=2))
+        _STORE.put_report(run_id, report)
+        _STORE.put_results(run_id, results)
 
         # Update registry: completed
         with registry_lock:
@@ -264,21 +417,12 @@ def _execute_run(run_id: str, task_ids: Optional[list], categories: Optional[lis
 
 # ── FastAPI app ───────────────────────────────────────────────────────────────
 def _startup_repair_and_warn():
-    """Repair the run index from disk on boot, and flag ephemeral storage —
-    the usual reason runs 'disappear' after a redeploy."""
-    if not os.environ.get("DATA_DIR"):
-        print(
-            "WARNING: DATA_DIR is not set — writing runs to ephemeral './data'. "
-            "Run history will be LOST on every redeploy/restart. On Render, attach "
-            "a persistent disk and set DATA_DIR to its mount path (e.g. /data)."
-        )
-    else:
-        print(f"Run data directory: {RESULTS_DIR.resolve()}")
+    """Let the active storage backend run its boot tasks: the disk backend
+    repairs the index and warns on ephemeral storage; Postgres just reports in."""
     try:
-        with registry_lock:
-            _save_registry(_load_registry())  # persist any runs recovered from disk
+        _STORE.startup()
     except Exception as e:
-        print(f"Registry self-heal at startup failed (non-fatal): {e}")
+        print(f"Storage startup failed (non-fatal): {e}")
 
 
 @asynccontextmanager
@@ -388,10 +532,10 @@ def dashboard_data():
 @app.get("/dashboard/runs/{run_id}")
 def dashboard_run_report(run_id: str):
     """Public aggregate report (scores only) for one completed run."""
-    report_path = RESULTS_DIR / run_id / "report.json"
-    if not report_path.exists():
+    report = _STORE.get_report(run_id)
+    if report is None:
         raise HTTPException(404, f"No report for run {run_id}")
-    return json.loads(report_path.read_text())
+    return report
 
 
 @app.get("/tasks")
@@ -527,10 +671,9 @@ def get_run(run_id: str, x_api_key: Optional[str] = Header(default=None)):
     if run_meta["status"] != "completed":
         return run_meta
 
-    # Load report
-    report_path = RESULTS_DIR / run_id / "report.json"
-    if report_path.exists():
-        report = json.loads(report_path.read_text())
+    # Load report from the active store (disk file or Postgres row)
+    report = _STORE.get_report(run_id)
+    if report is not None:
         return {**run_meta, "report": report}
 
     return run_meta
@@ -549,11 +692,9 @@ def get_run_results(run_id: str, x_api_key: Optional[str] = Header(default=None)
     if reg[run_id]["status"] != "completed":
         raise HTTPException(409, f"Run {run_id} is {reg[run_id]['status']}, not completed yet")
 
-    results_path = RESULTS_DIR / run_id / "all_results.json"
-    if not results_path.exists():
-        raise HTTPException(404, "Results file not found")
-
-    results = json.loads(results_path.read_text())
+    results = _STORE.get_results(run_id)
+    if results is None:
+        raise HTTPException(404, "Results not found")
 
     # Return lightweight version (no full trajectories by default)
     return {
@@ -589,11 +730,10 @@ def get_trajectory(
 ):
     """Get full trajectory (all turns, tool calls, outputs) for a specific task."""
     verify_key(x_api_key)
-    results_path = RESULTS_DIR / run_id / "all_results.json"
-    if not results_path.exists():
+    results = _STORE.get_results(run_id)
+    if results is None:
         raise HTTPException(404, "Run results not found")
 
-    results = json.loads(results_path.read_text())
     match = next((r for r in results if r["task_id"] == task_id), None)
     if not match:
         raise HTTPException(404, f"Task {task_id} not found in run {run_id}")
@@ -603,7 +743,7 @@ def get_trajectory(
 
 @app.delete("/runs/{run_id}")
 def delete_run(run_id: str, x_api_key: Optional[str] = Header(default=None)):
-    """Delete a run and its results from disk."""
+    """Delete a run and its results from the active store."""
     verify_key(x_api_key)
     with registry_lock:
         reg = _load_registry()
@@ -612,10 +752,7 @@ def delete_run(run_id: str, x_api_key: Optional[str] = Header(default=None)):
         del reg[run_id]
         _save_registry(reg)
 
-    # Remove files
-    import shutil
-    run_dir = RESULTS_DIR / run_id
-    if run_dir.exists():
-        shutil.rmtree(run_dir)
+    # Remove the run's report/results (disk folder, or Postgres row)
+    _STORE.delete_run(run_id)
 
     return {"deleted": run_id}
