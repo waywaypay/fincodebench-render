@@ -2,8 +2,9 @@
 
 **A coding agent eval suite for financial data tasks**
 
-30 tasks across 5 categories, testing Claude Code's ability to extract structured financial data,
-generate correct financial code, run multi-step agentic computations, and debug broken models.
+33 tasks across 6 categories, testing Claude Code's ability to extract structured financial data,
+generate correct financial code, run fixed multi-step workflows, work agentically across multiple
+tools on open-ended problems, and debug broken models.
 
 ---
 
@@ -25,8 +26,16 @@ or a hallucinated revenue figure isn't an inconvenience, it's a wrong investment
 | extraction      | 5     | exact_json / llm_judge | Parse financial tables, filings, press releases |
 | code_generation | 9     | functional (unit tests)| Write correct financial functions |
 | computation     | 6     | fuzzy_number / fuzzy_dict | Financial formulas, ratios, WACC, Altman Z |
-| agentic         | 5     | llm_judge             | Multi-step: fetch + compute + summarize |
+| workflow        | 5     | llm_judge             | Fixed, pre-specified pipeline (do step 1..4) run through the tool loop |
+| agentic         | 5     | llm_judge             | Open-ended: discover data across tools, decide an approach, reconcile messy inputs |
 | debug           | 3     | functional (unit tests)| Find and fix bugs in financial code |
+
+The split between **workflow** and **agentic** is deliberate. A workflow hands the agent the
+decomposition — the prompt enumerates the steps; the agent just executes them and self-corrects.
+An agentic task hands over only the goal: the data is spread across tools (and some of it is
+reachable only via `fetch_filing`, never the local files), it is deliberately messy (missing
+periods, mixed units, restatements, duplicates, anomalies), and the agent must decide what to do,
+which tool to call next, and when it is done. Skipping the investigation lands on a wrong answer.
 
 ---
 
@@ -112,7 +121,7 @@ Score 1 if tests pass (print PASS + exit 0), 0 otherwise.
 The most rigorous method for code generation tasks.
 
 **llm_judge** — Separate Claude call with a structured 0–4 rubric.
-Used for agentic tasks where output format varies and execution matters.
+Used for workflow and agentic tasks where output format varies and execution matters.
 See `harness/judge.py` for the judge prompt and calibration tooling.
 
 ---
@@ -122,7 +131,7 @@ See `harness/judge.py` for the judge prompt and calibration tooling.
 ```
 fincodebench/
 ├── tasks/
-│   └── tasks.json          # 30 task definitions with embedded context data
+│   └── tasks.json          # 33 task definitions (embedded context, or a tools_data block for agentic tasks)
 ├── harness/
 │   ├── providers.py        # Provider registry + unified Anthropic/OpenAI chat client
 │   ├── runner.py           # Executes the model on each task, captures trajectory
@@ -188,6 +197,32 @@ Edit `tasks/tasks.json`. Follow the schema:
   "max_turns": 5
 }
 ```
+
+For **agentic** tasks (scored by `llm_judge`), data lives behind tools instead of in `context`.
+Add a `tools_data` block and the runner builds the task's tool set automatically:
+
+```json
+{
+  "id": "agentic-NNN",
+  "category": "agentic",
+  "difficulty": "medium",
+  "prompt": "An open-ended goal — no numbered steps.",
+  "context": null,
+  "scoring_type": "llm_judge",
+  "rubric": "Score 4 if … Score 0 if no code runs.",
+  "max_turns": 8,
+  "tools_data": {
+    "files":   { "data.csv": "col,...\n..." },
+    "filings": { "Acme Inc": { "2024": { "ebitda_usd_m": 260 } } }
+  }
+}
+```
+
+`files` are seeded into the agent's private working directory — reachable via `list_files` /
+`read_file` and openable from `execute_python` (which runs in that directory). `filings` are served
+only by `fetch_filing(company, year)` and never written to disk, so a task that needs them forces
+the model to actually choose that tool. Both keys are optional; omit `tools_data` entirely and a
+task gets only `execute_python`, exactly as before.
 
 ### Add new scoring methods
 Implement a function in `scorer.py` and add a branch to `score_task()`.
