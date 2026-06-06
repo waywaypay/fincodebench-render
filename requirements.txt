@@ -1,5 +1,6 @@
 anthropic>=0.40.0
 openai>=1.40.0          # OpenAI-compatible providers (OpenAI, OpenRouter, DeepSeek, Qwen, Kimi, Venice)
+numpy>=1.26.0          # used by code_generation/debug tasks (and their test suites) via np.polyfit
 fastapi>=0.115.0
 uvicorn[standard]>=0.32.0
 pydantic>=2.0.0

@@ -49,8 +49,17 @@ def _extract_code_blocks(text: str) -> list[str]:
     return blocks
 
 
-def _float_close(a: float, b: float, tolerance: float) -> bool:
-    """True if a and b are within tolerance of each other (relative if b≠0)."""
+def _float_close(a: float, b: float, tolerance: float, tolerance_abs: Optional[float] = None) -> bool:
+    """True if a and b are within tolerance of each other.
+
+    When `tolerance_abs` is given, compare on an absolute basis (|a - b| <=
+    tolerance_abs) — use this when the expected value is a magnitude (e.g. a
+    dollar figure) where a relative tolerance is the wrong unit. Otherwise use a
+    relative tolerance (|a - b| / |b| <= tolerance), falling back to absolute
+    when b == 0.
+    """
+    if tolerance_abs is not None:
+        return abs(a - b) <= tolerance_abs
     if b == 0:
         return abs(a) <= tolerance
     return abs(a - b) / abs(b) <= tolerance
@@ -76,14 +85,15 @@ def score_exact_json(response: str, expected: Any) -> dict:
     }
 
 
-def score_fuzzy_number(response: str, expected: float, tolerance: float = 0.02) -> dict:
+def score_fuzzy_number(response: str, expected: float, tolerance: float = 0.02,
+                       tolerance_abs: Optional[float] = None) -> dict:
     """
     Look for a number in the response within tolerance of expected.
     Returns score 0 or 1.
     """
     numbers = _extract_numbers(response)
     for num in numbers:
-        if _float_close(num, expected, tolerance):
+        if _float_close(num, expected, tolerance, tolerance_abs):
             return {"score": 1.0, "method": "fuzzy_number", "found": num, "expected": expected}
     return {
         "score": 0.0,
@@ -93,7 +103,8 @@ def score_fuzzy_number(response: str, expected: float, tolerance: float = 0.02) 
     }
 
 
-def score_fuzzy_dict(response: str, expected: dict, tolerance: float = 0.005) -> dict:
+def score_fuzzy_dict(response: str, expected: dict, tolerance: float = 0.005,
+                     tolerance_abs: Optional[float] = None) -> dict:
     """
     Parse JSON from response, compare numeric values with tolerance.
     Handles None values (matched only against None).
@@ -110,7 +121,7 @@ def score_fuzzy_dict(response: str, expected: dict, tolerance: float = 0.005) ->
         if exp_val is None:
             ok = got_val is None
         elif isinstance(exp_val, (int, float)) and isinstance(got_val, (int, float)):
-            ok = _float_close(float(got_val), float(exp_val), tolerance)
+            ok = _float_close(float(got_val), float(exp_val), tolerance, tolerance_abs)
         else:
             ok = got_val == exp_val
         details[key] = {"expected": exp_val, "got": got_val, "match": ok}
@@ -184,14 +195,16 @@ def score_task(task: dict, result: dict) -> dict:
         return score_fuzzy_number(
             response,
             task["expected_output"],
-            task.get("tolerance", 0.02)
+            task.get("tolerance", 0.02),
+            task.get("tolerance_abs"),
         )
 
     elif scoring_type == "fuzzy_dict":
         return score_fuzzy_dict(
             response,
             task["expected_output"],
-            task.get("tolerance", 0.005)
+            task.get("tolerance", 0.005),
+            task.get("tolerance_abs"),
         )
 
     elif scoring_type == "functional":
