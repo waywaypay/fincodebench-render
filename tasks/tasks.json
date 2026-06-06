@@ -571,7 +571,7 @@
     "id": "agentic-008",
     "category": "agentic",
     "difficulty": "hard",
-    "prompt": "You're on the buy side and your PM wants to know whether Polaris Corp's Q3 2025 revenue guidance of $920M is credible before adding to the position. The actuals file has recent quarterly revenues. Your job: search for Polaris's historical guidance figures from earnings call transcripts, compute their guidance track record quantitatively, and deliver a clear view on whether the $920M should be taken at face value — including any discount you'd apply and why.",
+    "prompt": "You're on the buy side and your PM wants to know whether Polaris Corp's Q3 2025 revenue guidance of $920M is credible before adding to the position. The actuals file has recent quarterly revenues. Your job: search for Polaris's historical guidance figures from earnings call transcripts, compute their guidance track record quantitatively, and deliver a clear view on whether the $920M should be taken at face value \u2014 including any discount you'd apply and why.",
     "context": null,
     "expected_output": null,
     "scoring_type": "llm_judge",
@@ -580,7 +580,7 @@
     "tools_data": {
       "files": {
         "quarterly_actuals.csv": "quarter,actual_revenue_usd_m\nQ1 2024,683\nQ2 2024,702\nQ3 2024,730\nQ4 2024,771\nQ1 2025,802\n",
-        "context.txt": "Polaris Corp — analyst note\nPolaris Corp is a mid-cap enterprise software company (ticker: PLRS). The PM is considering adding to the position ahead of Q3 2025 earnings. Management issued Q3 2025 revenue guidance of $920M at the midpoint on the Q1 2025 call. Before sizing up, the PM wants a view on whether Polaris has historically delivered on its guidance. The quarterly_actuals.csv file has the recent reported figures. Search for historical guidance figures from earnings calls and assess credibility.\n"
+        "context.txt": "Polaris Corp \u2014 analyst note\nPolaris Corp is a mid-cap enterprise software company (ticker: PLRS). The PM is considering adding to the position ahead of Q3 2025 earnings. Management issued Q3 2025 revenue guidance of $920M at the midpoint on the Q1 2025 call. Before sizing up, the PM wants a view on whether Polaris has historically delivered on its guidance. The quarterly_actuals.csv file has the recent reported figures. Search for historical guidance figures from earnings calls and assess credibility.\n"
       },
       "web_results": [
         {
@@ -593,7 +593,7 @@
           "title": "Polaris Corp Q1 2024 Earnings Call Transcript",
           "keywords": "Polaris Corp PLRS guidance outlook midpoint forecast track record historical Q2 2024 revenue actual miss earnings call transcript beat credibility",
           "source": "Earnings call transcript, Polaris Corp, May 2024",
-          "content": "CFO Jennifer Walsh: Q1 2024 revenue came in at $683 million. We did see some deal slippage toward the end of the quarter — primarily in our federal vertical — that pushed us below the midpoint of our prior guidance of $720 million. We view this as a timing issue. For Q2 2024, we are guiding to revenue of approximately $750 million. We have strong visibility into our top accounts and our pipeline coverage is at a two-year high."
+          "content": "CFO Jennifer Walsh: Q1 2024 revenue came in at $683 million. We did see some deal slippage toward the end of the quarter \u2014 primarily in our federal vertical \u2014 that pushed us below the midpoint of our prior guidance of $720 million. We view this as a timing issue. For Q2 2024, we are guiding to revenue of approximately $750 million. We have strong visibility into our top accounts and our pipeline coverage is at a two-year high."
         },
         {
           "title": "Polaris Corp Q2 2024 Earnings Call Transcript",
@@ -634,41 +634,41 @@
     "id": "agentic-009",
     "category": "agentic",
     "difficulty": "hard",
-    "prompt": "Meridian Retail's accounts receivable DSO has jumped sharply over the past year. Your credit risk team wants: (a) a quantified picture of how large the increase is and what is driving it, (b) how this compares to historical precedents in retail and consumer companies, and (c) what typically happened to those companies afterwards — so they can calibrate the risk. Use the files available to you, fetch any additional filing detail, and search for comparable historical cases in earnings calls and SEC filings.",
+    "prompt": "Meridian Retail's accounts receivable DSO has jumped sharply over the past year. Your credit risk team wants: (a) a quantified picture of how large the increase is and what is driving it, (b) how this compares to historical precedents in retail and consumer companies, and (c) what typically happened to those companies afterwards \u2014 so they can calibrate the risk. Use the files available to you, fetch any additional filing detail, and search for comparable historical cases in earnings calls and SEC filings.",
     "context": null,
     "expected_output": null,
     "scoring_type": "llm_judge",
-    "rubric": "Score 4 if: the code computes DSO (= AR / Revenue * 90) for each quarter and identifies the rise from ~45 days (Q1 2023) to ~78 days (Q4 2024), a ~33-day increase across the eight quarters of data; calls fetch_filing('Meridian Retail','2024') and establishes that $195M of the $451M Q4 2024 AR is owed by three wholesale partners under 120-day terms negotiated in Q2 2023 (a commercial concession, not an operational glitch); uses web_search and cites both extended-terms precedents with their outcomes — Broadstone Retail (DSO +29 days, revenue subsequently -22%) and Summit Lifestyle (DSO +40 days, orders/revenue subsequently -18%) — and explicitly distinguishes the benign Cascade Specialty case (ERP/billing glitch that normalised within two quarters with no revenue impact); and concludes Meridian fits the high-risk extended-terms bucket, citing the Credit Suisse finding that such cases saw revenue decline in 10 of 12 instances (median ~15%) over the following 4-6 quarters. Score 3 if it computes the DSO rise, fetches the filing to find the wholesale-terms driver, and cites at least one extended-terms precedent with a quantified revenue outcome, but does not explicitly contrast it with the benign Cascade case. Score 2 if it computes the DSO rise but never fetches the filing to establish the driver, OR never calls web_search for precedents, and so cannot calibrate the risk (e.g. dismisses it as a benign timing issue). Score 1 if the approach is sound but yields no clear risk assessment. Score 0 if no code runs.",
+    "rubric": "Score 4 if: the code computes DSO (= AR / Revenue * 90) for each quarter and identifies the rise from ~45 days (Q1 2023) to ~78 days (Q4 2024), a ~33-day increase across the eight quarters of data; calls fetch_filing('Meridian Retail','2024') and establishes that $195M of the $451M Q4 2024 AR is owed by three wholesale partners under 120-day terms negotiated in Q2 2023 (a commercial concession, not an operational glitch); uses web_search and cites both extended-terms precedents with their outcomes \u2014 Broadstone Retail (DSO +29 days, revenue subsequently -22%) and Summit Lifestyle (DSO +40 days, orders/revenue subsequently -18%) \u2014 and explicitly distinguishes the benign Cascade Specialty case (ERP/billing glitch that normalised within two quarters with no revenue impact); and concludes Meridian fits the high-risk extended-terms bucket, citing the Credit Suisse finding that such cases saw revenue decline in 10 of 12 instances (median ~15%) over the following 4-6 quarters. Score 3 if it computes the DSO rise, fetches the filing to find the wholesale-terms driver, and cites at least one extended-terms precedent with a quantified revenue outcome, but does not explicitly contrast it with the benign Cascade case. Score 2 if it computes the DSO rise but never fetches the filing to establish the driver, OR never calls web_search for precedents, and so cannot calibrate the risk (e.g. dismisses it as a benign timing issue). Score 1 if the approach is sound but yields no clear risk assessment. Score 0 if no code runs.",
     "max_turns": 12,
     "tools_data": {
       "files": {
         "meridian_financials.csv": "quarter,accounts_receivable_usd_m,revenue_usd_m\nQ1 2023,240,480\nQ2 2023,261,500\nQ3 2023,283,520\nQ4 2023,295,510\nQ1 2024,316,490\nQ2 2024,368,510\nQ3 2024,418,530\nQ4 2024,451,520\n",
-        "notes.txt": "Meridian Retail — credit risk review\nOur team flagged Meridian Retail (specialty apparel and home goods) for a quarterly credit review after noticing a sustained rise in their accounts receivable balance relative to revenue. The data file contains quarterly AR and revenue. Please compute DSO trends, pull any additional detail from the filing service, and research comparable historical situations in retail or consumer goods companies to help calibrate whether this is a temporary factor or a structural deterioration.\n"
+        "notes.txt": "Meridian Retail \u2014 credit risk review\nOur team flagged Meridian Retail (specialty apparel and home goods) for a quarterly credit review after noticing a sustained rise in their accounts receivable balance relative to revenue. The data file contains quarterly AR and revenue. Please compute DSO trends, pull any additional detail from the filing service, and research comparable historical situations in retail or consumer goods companies to help calibrate whether this is a temporary factor or a structural deterioration.\n"
       },
       "web_results": [
         {
-          "title": "Broadstone Retail 2020 Annual Report — Accounts Receivable and Revenue Risk",
+          "title": "Broadstone Retail 2020 Annual Report \u2014 Accounts Receivable and Revenue Risk",
           "keywords": "historical precedent comparable case DSO days sales outstanding accounts receivable spike increase wholesale payment terms extended net-90 retail consumer revenue decline channel partners",
           "source": "Broadstone Retail Inc. Form 10-K, filed March 2021",
-          "content": "Note 5 — Accounts Receivable: During fiscal 2020, the Company extended payment terms to its seven largest wholesale distribution partners from net-45 to net-90 days in order to maintain shelf-space commitments in a competitive market. Days sales outstanding rose from 42 days at the start of fiscal 2020 to 71 days by year-end, a 29-day increase. Over the 18 months following the term extension, distribution partners reduced order volumes as they worked down elevated inventory levels. Net revenue declined 22% from peak levels before stabilising. Management acknowledges that the term extension accelerated near-term revenue recognition at the cost of subsequent order deferral."
+          "content": "Note 5 \u2014 Accounts Receivable: During fiscal 2020, the Company extended payment terms to its seven largest wholesale distribution partners from net-45 to net-90 days in order to maintain shelf-space commitments in a competitive market. Days sales outstanding rose from 42 days at the start of fiscal 2020 to 71 days by year-end, a 29-day increase. Over the 18 months following the term extension, distribution partners reduced order volumes as they worked down elevated inventory levels. Net revenue declined 22% from peak levels before stabilising. Management acknowledges that the term extension accelerated near-term revenue recognition at the cost of subsequent order deferral."
         },
         {
-          "title": "Cascade Specialty Q3 2019 Earnings Call — DSO Increase Explained",
+          "title": "Cascade Specialty Q3 2019 Earnings Call \u2014 DSO Increase Explained",
           "keywords": "historical precedent comparable case DSO days sales outstanding accounts receivable spike increase ERP billing systems migration benign retail normalized no revenue impact temporary",
           "source": "Earnings call transcript, Cascade Specialty Products, November 2019",
-          "content": "CFO Robert Kim: I want to address the uptick in our accounts receivable days outstanding that analysts flagged from the 10-Q. DSO rose from 38 days to 63 days in Q3 — a 25-day increase — due entirely to a systems migration issue in our billing platform. The new ERP went live in August and had a two-week delay in generating customer invoices, creating a one-quarter AR backlog that has since normalised. As of the date of this call, DSO has returned to the low-40s range. There is no change to customer payment behaviour and no revenue quality issue."
+          "content": "CFO Robert Kim: I want to address the uptick in our accounts receivable days outstanding that analysts flagged from the 10-Q. DSO rose from 38 days to 63 days in Q3 \u2014 a 25-day increase \u2014 due entirely to a systems migration issue in our billing platform. The new ERP went live in August and had a two-week delay in generating customer invoices, creating a one-quarter AR backlog that has since normalised. As of the date of this call, DSO has returned to the low-40s range. There is no change to customer payment behaviour and no revenue quality issue."
         },
         {
-          "title": "Summit Lifestyle Brands 2022 Investor Day — Working Capital Retrospective",
+          "title": "Summit Lifestyle Brands 2022 Investor Day \u2014 Working Capital Retrospective",
           "keywords": "historical precedent comparable case DSO days sales outstanding accounts receivable spike increase wholesale payment terms extended net-90 lifestyle consumer retail revenue decline working capital",
           "source": "Summit Lifestyle Brands investor day presentation, September 2022",
-          "content": "Slide 14 — Working Capital: In 2021, Summit extended payment terms to five key wholesale partners from net-30 to net-90 days as part of our partner-first initiative to defend premium shelf positioning. DSO increased from 44 days to 84 days over the subsequent four quarters, a 40-day rise. Retrospective: The extended terms pulled forward order activity; over the following four quarters wholesale partners reduced new orders by an aggregate 18% as they normalised inventories. We have since reverted to net-45 terms and implemented sell-through monitoring for all wholesale partners."
+          "content": "Slide 14 \u2014 Working Capital: In 2021, Summit extended payment terms to five key wholesale partners from net-30 to net-90 days as part of our partner-first initiative to defend premium shelf positioning. DSO increased from 44 days to 84 days over the subsequent four quarters, a 40-day rise. Retrospective: The extended terms pulled forward order activity; over the following four quarters wholesale partners reduced new orders by an aggregate 18% as they normalised inventories. We have since reverted to net-45 terms and implemented sell-through monitoring for all wholesale partners."
         },
         {
-          "title": "Credit Suisse Specialty Retail Sector Note — DSO Trends as Leading Indicator",
+          "title": "Credit Suisse Specialty Retail Sector Note \u2014 DSO Trends as Leading Indicator",
           "keywords": "historical precedent comparable case DSO days sales outstanding accounts receivable retail consumer sector research diagnostic systems wholesale terms revenue decline leading indicator bifurcated",
           "source": "Credit Suisse Equity Research, Specialty Retail Sector, January 2023",
-          "content": "Our analysis of 24 specialty retail companies that experienced DSO increases of 20+ days between 2015 and 2022: outcomes were bifurcated. In cases driven by ERP or systems issues (8 instances), DSO normalised within 2 quarters with no revenue impact. In cases driven by extended wholesale payment terms (12 instances), revenue declined in the subsequent 4-6 quarters in 10 of 12 cases, median revenue decline 15%. Key diagnostic question: what drove the DSO increase — operational glitch or commercial concession to channel partners?"
+          "content": "Our analysis of 24 specialty retail companies that experienced DSO increases of 20+ days between 2015 and 2022: outcomes were bifurcated. In cases driven by ERP or systems issues (8 instances), DSO normalised within 2 quarters with no revenue impact. In cases driven by extended wholesale payment terms (12 instances), revenue declined in the subsequent 4-6 quarters in 10 of 12 cases, median revenue decline 15%. Key diagnostic question: what drove the DSO increase \u2014 operational glitch or commercial concession to channel partners?"
         }
       ],
       "filings": {
@@ -694,45 +694,55 @@
     "context": null,
     "expected_output": null,
     "scoring_type": "llm_judge",
-    "rubric": "Score 4 if: the code computes Vega's cost trajectory and shows R&D grew faster than revenue in both years — FY2023 R&D +25.0% vs revenue +20.0% and FY2024 R&D +23.2% vs revenue +18.5% — directly contradicting the 'R&D efficiency' lever; calls fetch_filing('Vega Technology','2024') and uses the disclosed R&D headcount growth of +26.3% in FY2024 (vs revenue +18.5%) and the fact that 83% of R&D cost is compensation to argue the cost base is sticky and slow to cut; uses web_search and cites both Apex Software (10pp target, delivered only 6pp = ~60% achievement, attributed to R&D cost stickiness) and the Morgan Stanley research (median achievement 55% of target; sub-15% EBITDA companies achieve a median ~2.1pp/year; only 18% of companies promising >3pp/year hit their target), while correctly setting aside Nexus Corp as a structural outlier (65% gross margin, R&D already declining); and concludes that Vega's 8-10pp-in-three-years target (~2.7-3.3pp/year) sits well above the ~2.1pp/year industry median and that, applying the ~55-60% historical achievement rate, ~4.5-6pp is the defensible figure to model rather than the full 8-10pp. Score 3 if it shows R&D outgrowing revenue and cites at least one precedent (Apex or Morgan Stanley) to justify a haircut, but does not quantify the revised expansion range. Score 2 if it reads the financials but accepts the CFO's narrative without testing it against the R&D trend, OR calls web_search but never ties the precedents back to Vega. Score 1 if the approach is sound but yields no recommendation. Score 0 if no code runs.",
+    "rubric": "Score 4 if: the code computes Vega's cost trajectory and shows R&D grew faster than revenue in both years \u2014 FY2023 R&D +25.0% vs revenue +20.0% and FY2024 R&D +23.2% vs revenue +18.5% \u2014 directly contradicting the 'R&D efficiency' lever; calls fetch_filing('Vega Technology','2024') and uses the disclosed R&D headcount growth of +26.3% in FY2024 (vs revenue +18.5%) and the fact that 83% of R&D cost is compensation to argue the cost base is sticky and slow to cut; uses web_search and cites both Apex Software (10pp target, delivered only 6pp = ~60% achievement, attributed to R&D cost stickiness) and the Morgan Stanley research (median achievement 55% of target; sub-15% EBITDA companies achieve a median ~2.1pp/year; only 18% of companies promising >3pp/year hit their target), while correctly setting aside Nexus Corp as a structural outlier (65% gross margin, R&D already declining); and concludes that Vega's 8-10pp-in-three-years target (~2.7-3.3pp/year) sits well above the ~2.1pp/year industry median and that, applying the ~55-60% historical achievement rate, ~4.5-6pp is the defensible figure to model rather than the full 8-10pp. Score 3 if it shows R&D outgrowing revenue and cites at least one precedent (Apex or Morgan Stanley) to justify a haircut, but does not quantify the revised expansion range. Score 2 if it reads the financials but accepts the CFO's narrative without testing it against the R&D trend, OR calls web_search but never ties the precedents back to Vega. Score 1 if the approach is sound but yields no recommendation. Score 0 if no code runs.",
     "max_turns": 12,
     "tools_data": {
       "files": {
         "vega_financials.csv": "metric,FY2022,FY2023,FY2024\nrevenue_usd_m,450,540,640\ncogs_usd_m,108,130,154\ngross_profit_usd_m,342,410,486\nrd_expense_usd_m,148,185,228\nsales_marketing_usd_m,90,105,123\nga_expense_usd_m,48,48,45\nebitda_usd_m,56,72,90\n",
-        "vega_analyst_day.txt": "Vega Technology — Analyst Day, May 2025 (CFO remarks excerpt)\n\nCFO Diana Okonkwo: 'We have a clear path to 22-24% EBITDA margins within three years. Our two primary levers are R&D efficiency — we have made the core platform investments and expect to grow R&D spend at roughly half the rate of revenue going forward — and sales productivity, where our new go-to-market motion is already delivering higher revenue per quota-carrying rep. At 14% EBITDA margin today, we have significant operating leverage to capture. We are committed to this target and will provide annual updates at each investor day.'\n"
+        "vega_analyst_day.txt": "Vega Technology \u2014 Analyst Day, May 2025 (CFO remarks excerpt)\n\nCFO Diana Okonkwo: 'We have a clear path to 22-24% EBITDA margins within three years. Our two primary levers are R&D efficiency \u2014 we have made the core platform investments and expect to grow R&D spend at roughly half the rate of revenue going forward \u2014 and sales productivity, where our new go-to-market motion is already delivering higher revenue per quota-carrying rep. At 14% EBITDA margin today, we have significant operating leverage to capture. We are committed to this target and will provide annual updates at each investor day.'\n"
       },
       "web_results": [
         {
-          "title": "Apex Software 2020 Investor Day — Margin Expansion Target and Three-Year Outcome",
+          "title": "Apex Software 2020 Investor Day \u2014 Margin Expansion Target and Three-Year Outcome",
           "keywords": "historical precedent comparable case software SaaS EBITDA operating margin expansion target investor day analyst day R&D efficiency lever outcome underdelivered shortfall missed three year",
           "source": "Apex Software Corp investor day, November 2020; Apex Software FY2023 annual report",
           "content": "Investor Day 2020 (CFO remarks): Apex is targeting 10 percentage points of EBITDA margin expansion over the next three years, from 13% to 23% by FY2023. Our primary lever is R&D efficiency: we have completed our platform consolidation and expect R&D to grow at roughly half the rate of revenue. Outcome (FY2023 annual report): Apex achieved 6 percentage points of expansion (13% to 19%), falling 4 points short of target. CFO post-mortem: R&D costs proved stickier than our model assumed, primarily because competition for senior engineering talent intensified and compensation inflation in R&D exceeded our planning assumptions by roughly 15% cumulatively."
         },
         {
-          "title": "Nexus Corp 2019 Investor Day — Margin Expansion Target and Outcome",
+          "title": "Nexus Corp 2019 Investor Day \u2014 Margin Expansion Target and Outcome",
           "keywords": "historical precedent comparable case software SaaS EBITDA operating margin expansion target investor day analyst day sales productivity lever outcome outperformed exceeded outlier three year",
           "source": "Nexus Corp investor day, September 2019; Nexus Corp FY2022 annual report",
-          "content": "Investor Day 2019: Nexus Corp CFO pledged 8 percentage points of EBITDA margin expansion in three years (16% to 24%) through sales productivity and infrastructure leverage. Outcome (FY2022): Nexus achieved 11 percentage points, exceeding target by 3 points. Key differentiators cited: (1) Nexus had 65% gross margins vs the sector median — more room for mix improvement; (2) R&D was already declining as a share of revenue before the investor day; (3) a simpler single-product architecture allowed aggressive R&D redeployment. Analysts noted Nexus was a clear outlier — most comparable software companies underperformed their margin targets."
+          "content": "Investor Day 2019: Nexus Corp CFO pledged 8 percentage points of EBITDA margin expansion in three years (16% to 24%) through sales productivity and infrastructure leverage. Outcome (FY2022): Nexus achieved 11 percentage points, exceeding target by 3 points. Key differentiators cited: (1) Nexus had 65% gross margins vs the sector median \u2014 more room for mix improvement; (2) R&D was already declining as a share of revenue before the investor day; (3) a simpler single-product architecture allowed aggressive R&D redeployment. Analysts noted Nexus was a clear outlier \u2014 most comparable software companies underperformed their margin targets."
         },
         {
-          "title": "Morgan Stanley Software Sector Research — Investor Day Margin Targets: Achievement Rates",
+          "title": "Morgan Stanley Software Sector Research \u2014 Investor Day Margin Targets: Achievement Rates",
           "keywords": "historical precedent comparable case software SaaS EBITDA operating margin expansion target investor day analyst day achievement rate industry research median per year base rate",
           "source": "Morgan Stanley Equity Research, Software Sector, March 2024",
-          "content": "We analysed 47 software companies that set explicit EBITDA margin expansion targets at investor days between 2015 and 2022 and tracked outcomes three years later. Key findings: (1) Median achievement rate was 55% of the promised expansion. (2) R&D-driven expansion claims underdelivered most frequently; sales productivity claims most often achieved. (3) Companies entering below 15% EBITDA margin achieved a median of 2.1 percentage points per year over three-year periods. (4) Companies promising more than 3pp per year were in the bottom quartile of achievement — only 18% delivered their full target. Treat ambitious margin targets from sub-15% EBITDA companies as aspirational rather than guidance."
+          "content": "We analysed 47 software companies that set explicit EBITDA margin expansion targets at investor days between 2015 and 2022 and tracked outcomes three years later. Key findings: (1) Median achievement rate was 55% of the promised expansion. (2) R&D-driven expansion claims underdelivered most frequently; sales productivity claims most often achieved. (3) Companies entering below 15% EBITDA margin achieved a median of 2.1 percentage points per year over three-year periods. (4) Companies promising more than 3pp per year were in the bottom quartile of achievement \u2014 only 18% delivered their full target. Treat ambitious margin targets from sub-15% EBITDA companies as aspirational rather than guidance."
         },
         {
-          "title": "Titan SaaS 2021 Investor Day — Margin Expansion Target Abandoned",
+          "title": "Titan SaaS 2021 Investor Day \u2014 Margin Expansion Target Abandoned",
           "keywords": "historical precedent comparable case software SaaS EBITDA operating margin expansion target investor day analyst day abandoned revenue miss outcome contingent",
           "source": "Titan SaaS investor day, April 2021; Titan SaaS FY2023 annual report",
-          "content": "Investor Day 2021: Titan SaaS CFO pledged 12 percentage points of EBITDA margin expansion in three years through platform leverage and R&D consolidation. Outcome: Titan pivoted to a new product category in 2022 to address competitive pressure. Revenue declined 20% and the margin expansion target was formally abandoned at the 2023 investor day. Illustrates that margin targets are contingent on revenue trajectory — a significant revenue miss can make the operating leverage narrative moot."
+          "content": "Investor Day 2021: Titan SaaS CFO pledged 12 percentage points of EBITDA margin expansion in three years through platform leverage and R&D consolidation. Outcome: Titan pivoted to a new product category in 2022 to address competitive pressure. Revenue declined 20% and the margin expansion target was formally abandoned at the 2023 investor day. Illustrates that margin targets are contingent on revenue trajectory \u2014 a significant revenue miss can make the operating leverage narrative moot."
         }
       ],
       "filings": {
         "Vega Technology": {
           "2024": {
-            "rd_headcount": {"FY2022": 890, "FY2023": 1120, "FY2024": 1415},
-            "rd_headcount_growth_pct": {"FY2023": 25.8, "FY2024": 26.3},
-            "revenue_growth_pct": {"FY2023": 20.0, "FY2024": 18.5},
+            "rd_headcount": {
+              "FY2022": 890,
+              "FY2023": 1120,
+              "FY2024": 1415
+            },
+            "rd_headcount_growth_pct": {
+              "FY2023": 25.8,
+              "FY2024": 26.3
+            },
+            "revenue_growth_pct": {
+              "FY2023": 20.0,
+              "FY2024": 18.5
+            },
             "rd_compensation_pct_of_rd_costs": 83,
             "note": "FY2024 10-K Note 8: R&D headcount increased from 1,120 to 1,415 employees (+26.3%) in FY2024 versus revenue growth of 18.5%. Compensation and benefits represent 83% of total R&D expenses. The Company does not currently expect material R&D headcount reductions."
           }
@@ -744,38 +754,38 @@
     "id": "agentic-011",
     "category": "agentic",
     "difficulty": "hard",
-    "prompt": "A junior analyst flagged that Nova Consumer Goods reported a 35% sequential revenue jump in Q4 2024 while the distributor inventory tracking index rose 60% in the same quarter — a large divergence between sell-in and estimated sell-through. Before the PM adds to the position, you need to: (a) quantify the divergence and its significance, (b) research historical precedents for this kind of sell-in versus sell-through gap in consumer and retail companies, and (c) assess what typically happens in the 1-2 quarters following such events. Use the available files, the filing service, and web search.",
+    "prompt": "A junior analyst flagged that Nova Consumer Goods reported a 35% sequential revenue jump in Q4 2024 while the distributor inventory tracking index rose 60% in the same quarter \u2014 a large divergence between sell-in and estimated sell-through. Before the PM adds to the position, you need to: (a) quantify the divergence and its significance, (b) research historical precedents for this kind of sell-in versus sell-through gap in consumer and retail companies, and (c) assess what typically happens in the 1-2 quarters following such events. Use the available files, the filing service, and web search.",
     "context": null,
     "expected_output": null,
     "scoring_type": "llm_judge",
-    "rubric": "Score 4 if: the code computes the Q3->Q4 2024 divergence — revenue +35.2% (290->392) versus distributor inventory index +60.2% (108->173), a ~25pp gap; calls fetch_filing('Nova Consumer Goods','2024'), notes management frames it as 'proactive inventory positioning' by distributors, and flags that Nova does not track or disclose sell-through data (a red flag in its own right); uses web_search and cites both quantified precedents — GreenLeaf Consumer Goods (+31% revenue and +58% channel inventory, then revenue -24% over the following two quarters) and BlueRidge Industries (sell-in exceeded sell-through by 18%, then a $38M revenue headwind that persisted 1-2 quarters) — and applies the Kestrel Brands rule of thumb that a 25-30pp gap between inventory and revenue growth implies near-certain near-term order moderation; and concludes Nova's pattern is consistent with channel loading that reverses in the following 1-2 quarters, recommending a ~20-30% haircut to H1 2025 consensus revenue. Score 3 if it quantifies the divergence, fetches the filing, and cites at least one precedent with a quantified revenue outcome plus a directional H1 2025 haircut, but misses either the sell-through non-disclosure flag or the Kestrel threshold. Score 2 if it notes the divergence from the file but never calls web_search for precedents OR never fetches the filing, and so cannot calibrate the forward risk. Score 1 if the approach is sound but yields no forecast implication. Score 0 if no code runs.",
+    "rubric": "Score 4 if: the code computes the Q3->Q4 2024 divergence \u2014 revenue +35.2% (290->392) versus distributor inventory index +60.2% (108->173), a ~25pp gap; calls fetch_filing('Nova Consumer Goods','2024'), notes management frames it as 'proactive inventory positioning' by distributors, and flags that Nova does not track or disclose sell-through data (a red flag in its own right); uses web_search and cites both quantified precedents \u2014 GreenLeaf Consumer Goods (+31% revenue and +58% channel inventory, then revenue -24% over the following two quarters) and BlueRidge Industries (sell-in exceeded sell-through by 18%, then a $38M revenue headwind that persisted 1-2 quarters) \u2014 and applies the Kestrel Brands rule of thumb that a 25-30pp gap between inventory and revenue growth implies near-certain near-term order moderation; and concludes Nova's pattern is consistent with channel loading that reverses in the following 1-2 quarters, recommending a ~20-30% haircut to H1 2025 consensus revenue. Score 3 if it quantifies the divergence, fetches the filing, and cites at least one precedent with a quantified revenue outcome plus a directional H1 2025 haircut, but misses either the sell-through non-disclosure flag or the Kestrel threshold. Score 2 if it notes the divergence from the file but never calls web_search for precedents OR never fetches the filing, and so cannot calibrate the forward risk. Score 1 if the approach is sound but yields no forecast implication. Score 0 if no code runs.",
     "max_turns": 12,
     "tools_data": {
       "files": {
         "nova_quarterly.csv": "quarter,revenue_usd_m,gross_margin_pct,distributor_inventory_index\nQ1 2024,270,38.2,100\nQ2 2024,285,37.8,103\nQ3 2024,290,37.5,108\nQ4 2024,392,39.1,173\n",
-        "notes.txt": "Nova Consumer Goods — analyst flag\nNova Consumer Goods (specialty home and lifestyle products) reported Q4 2024 results last week. Our team tracks distributor inventory via a proprietary index (Q1 2024 = 100 baseline) sourced from channel checks. The jump from 108 in Q3 to 173 in Q4 alongside a 35% sequential revenue increase has raised concerns about whether this reflects genuine demand or channel loading. Please quantify the divergence, pull any additional context from the filing service, and research historical precedents to help the PM calibrate the risk for H1 2025 revenue.\n"
+        "notes.txt": "Nova Consumer Goods \u2014 analyst flag\nNova Consumer Goods (specialty home and lifestyle products) reported Q4 2024 results last week. Our team tracks distributor inventory via a proprietary index (Q1 2024 = 100 baseline) sourced from channel checks. The jump from 108 in Q3 to 173 in Q4 alongside a 35% sequential revenue increase has raised concerns about whether this reflects genuine demand or channel loading. Please quantify the divergence, pull any additional context from the filing service, and research historical precedents to help the PM calibrate the risk for H1 2025 revenue.\n"
       },
       "web_results": [
         {
-          "title": "GreenLeaf Consumer Goods 2018 Annual Report — Revenue Recognition and Channel Inventory",
+          "title": "GreenLeaf Consumer Goods 2018 Annual Report \u2014 Revenue Recognition and Channel Inventory",
           "keywords": "historical precedent comparable case channel loading stuffing sell-in sell-through distributor inventory days-on-hand divergence gap consumer goods retail revenue decline reversal",
           "source": "GreenLeaf Consumer Goods Inc. Form 10-K, filed February 2019",
           "content": "Management Discussion: In Q4 2018, net revenue increased 31% sequentially as distribution partners accelerated orders ahead of expected consumer demand. Concurrently, our third-party channel inventory tracking indicated distributor days-on-hand rose approximately 58%, suggesting sell-in materially exceeded sell-through in the period. In H1 2019, distribution partners reduced new orders to work down elevated inventory levels. Net revenue in H1 2019 declined 24% from Q4 2018 levels before stabilising. We have since implemented quarterly sell-through reporting requirements for our top 10 distribution partners to improve visibility and reduce inventory volatility."
         },
         {
-          "title": "BlueRidge Industries Q1 2020 Earnings Call — Channel Inventory Headwind",
+          "title": "BlueRidge Industries Q1 2020 Earnings Call \u2014 Channel Inventory Headwind",
           "keywords": "historical precedent comparable case channel loading sell-in sell-through distributor inventory pre-buy destocking gap consumer industrial revenue headwind reversal next quarter",
           "source": "Earnings call transcript, BlueRidge Industries, April 2020",
-          "content": "CFO Patricia Huang: I want to address Q1 2020 revenue performance directly. Regarding Q4 2019 — sell-in exceeded sell-through by approximately 18% in that quarter, driven by distributor pre-buy activity ahead of an anticipated price increase. We have worked with distribution partners to normalise inventory levels. Q1 2020 revenue of $312 million reflects a $38 million headwind from distributor destocking. We expect this headwind to diminish materially in Q2 as inventories normalise. Analyst: How long do you expect the destocking to persist? CFO: Based on our channel checks, 1-2 quarters."
+          "content": "CFO Patricia Huang: I want to address Q1 2020 revenue performance directly. Regarding Q4 2019 \u2014 sell-in exceeded sell-through by approximately 18% in that quarter, driven by distributor pre-buy activity ahead of an anticipated price increase. We have worked with distribution partners to normalise inventory levels. Q1 2020 revenue of $312 million reflects a $38 million headwind from distributor destocking. We expect this headwind to diminish materially in Q2 as inventories normalise. Analyst: How long do you expect the destocking to persist? CFO: Based on our channel checks, 1-2 quarters."
         },
         {
-          "title": "Kestrel Brands 2021 Investor Day — Channel Discipline and Sell-Through Monitoring",
+          "title": "Kestrel Brands 2021 Investor Day \u2014 Channel Discipline and Sell-Through Monitoring",
           "keywords": "historical precedent comparable case channel loading sell-in sell-through distributor inventory growth gap divergence discipline monitoring consumer rule of thumb threshold order moderation",
           "source": "Kestrel Brands investor day presentation, October 2021",
-          "content": "Slide 22 — Channel Discipline: We implemented rigorous sell-through monitoring following our 2019 channel loading event. Key lesson: when distributor inventory growth exceeds sell-in revenue growth by 25-30 percentage points or more, our historical data shows a near-certainty of near-term order moderation. The critical variable is duration — moderation lasting 1 quarter is manageable; lasting 3+ quarters signals structural demand issues. Companies that do not collect or disclose sell-through data are effectively flying blind on channel health."
+          "content": "Slide 22 \u2014 Channel Discipline: We implemented rigorous sell-through monitoring following our 2019 channel loading event. Key lesson: when distributor inventory growth exceeds sell-in revenue growth by 25-30 percentage points or more, our historical data shows a near-certainty of near-term order moderation. The critical variable is duration \u2014 moderation lasting 1 quarter is manageable; lasting 3+ quarters signals structural demand issues. Companies that do not collect or disclose sell-through data are effectively flying blind on channel health."
         },
         {
-          "title": "SEC Enforcement Action — StyleMax Corp Revenue Restatement 2017",
+          "title": "SEC Enforcement Action \u2014 StyleMax Corp Revenue Restatement 2017",
           "keywords": "historical precedent comparable case channel stuffing loading sell-in sell-through distributor inventory SEC enforcement restatement right of return consumer revenue recognition",
           "source": "SEC Litigation Release, In the Matter of StyleMax Corp, December 2017",
           "content": "The Commission found that StyleMax Corp improperly recognised revenue on channel-stuffed shipments during Q3 and Q4 2016. StyleMax shipped product to distribution partners with implicit right-of-return provisions that were not disclosed. Revenue was restated by $67 million across the two quarters. Distributor inventory at the time was more than double the sell-through rate. The case highlights the importance of understanding the economic substance of sell-in transactions when distributor inventory grows significantly faster than underlying consumer demand."
@@ -790,6 +800,69 @@
             "management_commentary": "Q4 2024 net revenue of $392M represented our strongest sell-in quarter since 2021, driven by proactive inventory positioning by our distribution partners ahead of expected consumer demand in H1 2025. Sell-through data is proprietary to our distribution partners and is not publicly available. Management expects continued momentum into H1 2025.",
             "note": "FY2024 10-K: The Company does not independently track or disclose distributor sell-through data. Revenue is recognised on shipment. No channel inventory policy changes were made in FY2024."
           }
+        }
+      }
+    }
+  },
+  {
+    "id": "agentic_real-001",
+    "category": "agentic_real",
+    "difficulty": "medium",
+    "prompt": "Microsoft runs three reportable business segments. Using the company's most recent annual filing, compute the operating margin for each segment and rank them from highest to lowest. Which segment has the highest operating margin \u2014 and does that match the segment with the highest absolute operating income? Explain any gap between revenue rank and margin rank.",
+    "context": null,
+    "expected_output": null,
+    "scoring_type": "llm_judge",
+    "rubric": "Score 4 if: the code fetches the MSFT 10-K via fetch_sec_filing('Microsoft','10-K','2024'), parses all three segment revenue and operating income figures, computes margins correctly (Productivity ~49.3%, Intelligent Cloud ~46.3%, More Personal Computing ~24.1%), identifies Productivity and Business Processes as the highest-margin segment, and explicitly notes that Intelligent Cloud leads on both revenue ($105B) and absolute operating income ($48.7B) but trails Productivity on margin \u2014 making the margin rank different from the revenue/income rank. Score 3 if it fetches the data, gets the correct ranking, but provides thin analysis of the rank divergence. Score 2 if it picks Intelligent Cloud as the highest-margin segment (the revenue trap), or uses incorrect figures. Score 1 if the approach is sound but produces no usable ranking. Score 0 if no code runs or it crashes.",
+    "max_turns": 8,
+    "tools_data": {
+      "snapshots": {
+        "fetch_sec_filing": {
+          "Microsoft:10-K:2024": "MICROSOFT CORPORATION\nFORM 10-K \u2014 FISCAL YEAR ENDED JUNE 30, 2024\n\nSEGMENT RESULTS (in millions)\n\nProductivity and Business Processes\n  Revenue                          $  77,698\n  Gross margin                     $  55,243\n  Operating income                 $  38,304\n\nIntelligent Cloud\n  Revenue                          $ 105,357\n  Gross margin                     $  73,625\n  Operating income                 $  48,742\n\nMore Personal Computing\n  Revenue                          $  62,042\n  Gross margin                     $  28,441\n  Operating income                 $  14,968\n\nCorporate and Other (unallocated)  $  (1,369)\n                                   ----------\nTotal company revenue              $ 245,097\nTotal company operating income     $ 100,645\n\nSource: Microsoft Corporation Annual Report on Form 10-K,\nfiled July 30, 2024. Accession No. 0001564590-24-017491.\n"
+        },
+        "web_search": {
+          "Microsoft FY2024 10-K segment revenue operating income margins": "Microsoft fiscal year 2024 ended June 30, 2024. Total revenue $245.1B (+16% YoY). Three reportable segments: Intelligent Cloud (Azure, server products) $105.4B; Productivity and Business Processes (Office, LinkedIn, Dynamics) $77.7B; More Personal Computing (Windows, Xbox, Surface, Activision) $62.0B. Operating income $100.6B. Azure grew 29% in FY2024."
+        }
+      }
+    }
+  },
+  {
+    "id": "agentic_real-002",
+    "category": "agentic_real",
+    "difficulty": "hard",
+    "prompt": "NVIDIA's business has shifted dramatically toward AI infrastructure. Using the company's SEC filings, compute the Data Center segment's share of total revenue in both FY2024 and FY2025 (NVIDIA's fiscal years end in late January). Quantify how much that concentration increased, and compute the compound annual growth rate of Data Center revenue over the two-year period. Flag any interpretation issues with using a single-segment CAGR over this window.",
+    "context": null,
+    "expected_output": null,
+    "scoring_type": "llm_judge",
+    "rubric": "Score 4 if: the code fetches NVDA segment data via fetch_sec_filing('NVIDIA','10-K','2025') which returns both FY2025 and FY2024 comparative figures, correctly reads Data Center revenue ($115,187M in FY2025, $47,532M in FY2024) and total revenue ($130,497M and $60,922M), computes segment share as 88.3% (FY2025) vs 78.0% (FY2024), a +10.3pp increase, computes the one-year CAGR correctly as 115187/47532 - 1 = 142.3%, and flags that a single-year growth rate over an AI-driven hypergrowth period may not be extrapolable. Score 3 if it gets the shares and growth rate right but misses the interpretive caveat, or has a minor arithmetic error. Score 2 if it computes revenue shares but gets the CAGR formula wrong (e.g., uses total revenue as denominator, or miscalculates), or fetches only one year. Score 1 if the approach is sound but yields no usable figures. Score 0 if no code runs.",
+    "max_turns": 8,
+    "tools_data": {
+      "snapshots": {
+        "fetch_sec_filing": {
+          "NVIDIA:10-K:2025": "NVIDIA CORPORATION\nFORM 10-K \u2014 FISCAL YEAR ENDED JANUARY 26, 2025\n\nREVENUE BY REPORTABLE SEGMENT (in millions)\n\n                              Year Ended      Year Ended\n                            Jan 26, 2025    Jan 28, 2024\nData Center                  $ 115,187       $  47,532\nGaming                       $  11,445       $  10,447\nProfessional Visualization   $   1,866       $   1,714\nAutomotive                   $   1,695       $     903\nOEM & Other                  $     588       $     325\n                             ---------       ---------\nTotal Revenue                $ 130,497       $  60,922\n\nData Center revenue includes sales of compute and networking products\nfor AI training and inference, cloud computing, and data centre workloads.\nGrowth was primarily driven by demand for Hopper GPU computing platforms.\n\nSource: NVIDIA Corporation Annual Report on Form 10-K,\nFiscal Year Ended January 26, 2025.\n"
+        },
+        "web_search": {
+          "NVIDIA FY2025 annual revenue Data Center segment share": "NVIDIA reported record revenue of $130.5 billion for fiscal year 2025 ended January 26, 2025, up 114% year-over-year. Data Center revenue reached $115.2 billion, driven by strong demand for Hopper and Blackwell AI computing platforms. Gaming revenue was $11.4 billion. The company's data center business now represents the vast majority of total revenue."
+        }
+      }
+    }
+  },
+  {
+    "id": "agentic_real-003",
+    "category": "agentic_real",
+    "difficulty": "hard",
+    "prompt": "Apple discloses gross margin separately for its Products and Services segments. Using the FY2024 10-K, compute each segment's gross margin percentage. Then answer a hypothetical: if Services had remained at exactly 20% of Apple's total revenue (roughly its FY2022 mix) while keeping its actual FY2024 gross margin rate, what would the company's blended gross margin have been? Quantify the gross margin benefit Apple has realised from Services growing as a share of revenue.",
+    "context": null,
+    "expected_output": null,
+    "scoring_type": "llm_judge",
+    "rubric": "Score 4 if: the code fetches Apple's segment P&L via fetch_sec_filing('Apple','10-K','2024'), correctly reads Products revenue ($294,866M, gross margin $109,184M \u2192 37.0%) and Services revenue ($96,169M, gross margin $70,993M \u2192 73.8%), computes the actual blended margin (180,177/391,035 = 46.1%), then recomputes the hypothetical blended margin with Services at 20% of $391,035M = $78,207M at 73.8% and Products at $312,828M at 37.0%, yielding ~44.4%, and correctly concludes that the Services mix shift from ~20% to ~24.6% of revenue added approximately 1.7 percentage points to Apple's blended gross margin. Score 3 if it fetches the data, gets the actual margins right, and computes the hypothetical margin, but is slightly off on the quantified benefit or rounds aggressively. Score 2 if it uses net income margin instead of gross margin, omits the hypothetical computation, or gets the segment figures wrong. Score 1 if the approach is sound but yields no usable figures. Score 0 if no code runs.",
+    "max_turns": 8,
+    "tools_data": {
+      "snapshots": {
+        "fetch_sec_filing": {
+          "Apple:10-K:2024": "APPLE INC.\nFORM 10-K \u2014 FISCAL YEAR ENDED SEPTEMBER 28, 2024\n\nPRODUCTS AND SERVICES GROSS MARGIN (in millions)\n\n                    Revenue    Cost of Sales   Gross Margin\nProducts           $ 294,866    $ 185,682       $ 109,184\nServices           $  96,169    $  25,176       $  70,993\n                   ---------    ---------       ---------\nTotal              $ 391,035    $ 210,858       $ 180,177\n\nGross margin rates:\n  Products: 37.0%\n  Services: 73.8%\n  Total:    46.1%\n\nThe Services segment includes the App Store, Apple Music, iCloud,\nApple TV+, Apple Care, Apple Pay, licensing, and other services.\nProducts includes iPhone, Mac, iPad, Wearables, Home and Accessories.\n\nSource: Apple Inc. Annual Report on Form 10-K,\nFiscal Year Ended September 28, 2024.\n"
+        },
+        "web_search": {
+          "Apple FY2024 10-K gross margin products services segment": "Apple reported FY2024 revenue of $391.0 billion, gross margin of $180.2 billion (46.2% blended). Services revenue grew to $96.2 billion (24.6% of total), up from $85.2B in FY2023. Products revenue was $294.9 billion. Services gross margin ~74% significantly exceeds Products gross margin ~37%, giving Apple structural margin expansion as Services grows."
         }
       }
     }

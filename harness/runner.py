@@ -91,6 +91,10 @@ FETCH_FILING_TOOL = {
     },
 }
 
+# Real-data tools for agentic_real tasks. These call live network services but
+# serve pre-captured snapshot responses first, giving reproducibility without
+# sacrificing authenticity. `source` in the trajectory trace shows whether a
+# snapshot or a live call answered each request.
 WEB_SEARCH_TOOL = {
     "name": "web_search",
     "description": (
@@ -113,6 +117,23 @@ WEB_SEARCH_TOOL = {
     },
 }
 
+FETCH_SEC_FILING_TOOL = {
+    "name": "fetch_sec_filing",
+    "description": (
+        "Retrieve key excerpts from a company's SEC filing (10-K, 10-Q, etc.). "
+        "Provide the company name, form type, and fiscal year. Returns a filing excerpt "
+        "containing financial tables and key disclosures relevant to your query."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "company": {"type": "string", "description": "Company name, e.g. 'Microsoft' or 'Apple'"},
+            "form_type": {"type": "string", "description": "SEC form type, e.g. '10-K' or '10-Q'"},
+            "year": {"type": "string", "description": "Fiscal year, e.g. '2024'"},
+        },
+        "required": ["company", "form_type", "year"],
+    },
+}
 # Default tool set for tasks that declare no data tools (kept as a module global
 # for back-compat with anything importing runner.TOOLS).
 TOOLS = [EXECUTE_PYTHON_TOOL]
@@ -250,6 +271,85 @@ def _web_search(web_results: list, query: str) -> str:
     return "\n\n---\n\n".join(parts)
 
 
+def _web_search_live(query: str, snapshots: dict, timeout: int = 10) -> tuple:
+    """Search the web for agentic_real tasks. Returns (result_str, source).
+    Serves from snapshot cache first; falls back to DuckDuckGo for cache misses."""
+    query = (query or "").strip()
+    if query in snapshots:
+        return snapshots[query], "snapshot"
+    try:
+        import urllib.parse
+        import urllib.request
+        params = urllib.parse.urlencode({"q": query, "format": "json", "no_html": "1"})
+        req = urllib.request.Request(
+            f"https://api.duckduckgo.com/?{params}",
+            headers={"User-Agent": "FinCodeBench/1.0 (benchmark research)"},
+        )
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            data = json.loads(resp.read())
+        parts = []
+        if data.get("AbstractText"):
+            parts.append(f"Summary: {data['AbstractText']}")
+            if data.get("AbstractSource"):
+                parts.append(f"Source: {data['AbstractSource']}")
+        for topic in (data.get("RelatedTopics") or [])[:5]:
+            if isinstance(topic, dict) and topic.get("Text"):
+                parts.append(f"- {topic['Text']}")
+        return ("\n".join(parts) if parts else "(no results — try a more specific query)"), "live"
+    except Exception as e:
+        return f"[ERROR] Web search failed: {e}", "error"
+
+
+def _fetch_sec_filing(company: str, form_type: str, year: str, snapshots: dict, timeout: int = 15) -> tuple:
+    """Fetch a SEC filing excerpt. Returns (result_str, source) where source is 'snapshot' or 'live'.
+    Snapshot key format: '{company}:{form_type}:{year}', e.g. 'Microsoft:10-K:2024'.
+    Live fallback queries EDGAR EFTS and returns filing metadata only (not full content)."""
+    company = (company or "").strip()
+    form_type = (form_type or "10-K").strip()
+    year = str(year or "").strip()
+    cache_key = f"{company}:{form_type}:{year}"
+    if cache_key in snapshots:
+        return snapshots[cache_key], "snapshot"
+    try:
+        import urllib.parse
+        import urllib.request
+        params = urllib.parse.urlencode({
+            "q": f'"{company}"',
+            "forms": form_type,
+            "dateRange": "custom",
+            "startdt": f"{year}-01-01",
+            "enddt": f"{int(year) + 1}-06-30",
+        })
+        req = urllib.request.Request(
+            f"https://efts.sec.gov/LATEST/search-index?{params}",
+            headers={"User-Agent": "FinCodeBench/1.0 (benchmark; contact: research@fincodebench.io)"},
+        )
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            data = json.loads(resp.read())
+        hits = (data.get("hits") or {}).get("hits") or []
+        if not hits:
+            return (
+                f"[ERROR] No {form_type} filing found for {company!r} in {year}. "
+                "Verify the exact company name or try the ticker symbol."
+            ), "live"
+        hit = hits[0].get("_source") or {}
+        meta = {
+            "company": hit.get("entity_name", company),
+            "form_type": hit.get("form_type", form_type),
+            "filed": hit.get("file_date"),
+            "period": hit.get("period_of_report"),
+            "accession_no": hit.get("accession_no"),
+            "note": (
+                "Live query — metadata only. Detailed financial tables are not included. "
+                "Use execute_python with the accession number to fetch specific sections, "
+                "or check that the snapshot key exactly matches the company name."
+            ),
+        }
+        return json.dumps(meta, indent=2), "live"
+    except Exception as e:
+        return f"[ERROR] SEC EDGAR query failed: {e}", "error"
+
+
 def build_task_tools(task: dict):
     """Build the (tools, executors, cleanup) triple for one task.
 
@@ -286,6 +386,24 @@ def build_task_tools(task: dict):
     if web_results:
         tools.append(WEB_SEARCH_TOOL)
         executors["web_search"] = lambda inp: _web_search(web_results, inp.get("query", ""))
+
+    # Real-data tools for agentic_real tasks. Responses are served from the
+    # task's snapshot dict (for reproducibility) with live network fallback.
+    # The default-argument capture (_ws, _ss) prevents late-binding closure bugs.
+    if "snapshots" in data:
+        snaps = data["snapshots"]
+        web_snaps = snaps.get("web_search") or {}
+        sec_snaps = snaps.get("fetch_sec_filing") or {}
+        tools.append(WEB_SEARCH_TOOL)
+        tools.append(FETCH_SEC_FILING_TOOL)
+        executors["web_search"] = (
+            lambda inp, _ws=web_snaps: _web_search_live(inp.get("query", ""), _ws)
+        )
+        executors["fetch_sec_filing"] = (
+            lambda inp, _ss=sec_snaps: _fetch_sec_filing(
+                inp.get("company", ""), inp.get("form_type", "10-K"), inp.get("year", ""), _ss
+            )
+        )
 
     def cleanup():
         if workdir:
@@ -396,15 +514,28 @@ def run_task(task: dict, verbose: bool = True) -> dict:
             for tc in response.tool_calls:
                 executor = executors.get(tc["name"])
                 if executor:
-                    tool_output = executor(tc["input"])
+                    t_call = time.time()
+                    raw = executor(tc["input"])
+                    call_ms = round((time.time() - t_call) * 1000)
+                    # Real tools return (output, trace_dict); synthetic tools return a str.
+                    if isinstance(raw, tuple) and len(raw) == 2:
+                        tool_output, trace_extra = raw[0], raw[1]
+                    else:
+                        tool_output, trace_extra = raw, {}
+                    trace = {"timestamp_utc": datetime.utcnow().isoformat() + "Z",
+                             "latency_ms": call_ms}
+                    if isinstance(trace_extra, dict):
+                        trace.update(trace_extra)
                 else:
                     tool_output = f"[ERROR] Unknown tool: {tc['name']}"
+                    trace = {"timestamp_utc": datetime.utcnow().isoformat() + "Z"}
 
-                # Record in trajectory
+                # Record in trajectory — trace carries timing + source for every call
                 traj_entry["blocks"].append({
                     "type": "tool_result",
                     "name": tc["name"],
-                    "result": tool_output
+                    "result": tool_output,
+                    "trace": trace,
                 })
 
                 if verbose:
@@ -511,7 +642,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="FinCodeBench runner")
     parser.add_argument("--task", nargs="+", help="Run specific task IDs")
     parser.add_argument("--category", nargs="+",
-                        choices=["extraction", "code_generation", "computation", "workflow", "agentic", "debug"],
+                        choices=["extraction", "code_generation", "computation", "workflow", "agentic", "agentic_real", "debug"],
                         help="Run only specific categories")
     parser.add_argument("--quiet", action="store_true", help="Suppress turn-by-turn output")
     args = parser.parse_args()

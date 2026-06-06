@@ -240,7 +240,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run FinCodeBench eval pipeline")
     parser.add_argument("--task", nargs="+", help="Specific task IDs")
     parser.add_argument("--category", nargs="+",
-                        choices=["extraction", "code_generation", "computation", "workflow", "agentic", "debug"])
+                        choices=["extraction", "code_generation", "computation", "workflow", "agentic", "agentic_real", "debug"])
     parser.add_argument("--skip-judge", action="store_true", help="Skip LLM-as-judge step")
     parser.add_argument("--quiet", action="store_true")
     args = parser.parse_args()
