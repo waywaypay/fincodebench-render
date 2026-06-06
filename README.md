@@ -2,7 +2,7 @@
 
 **A coding agent eval suite for financial data tasks**
 
-33 tasks across 6 categories, testing Claude Code's ability to extract structured financial data,
+35 tasks across 6 categories, testing Claude Code's ability to extract structured financial data,
 generate correct financial code, run fixed multi-step workflows, work agentically across multiple
 tools on open-ended problems, and debug broken models.
 
@@ -27,7 +27,7 @@ or a hallucinated revenue figure isn't an inconvenience, it's a wrong investment
 | code_generation | 9     | functional (unit tests)| Write correct financial functions |
 | computation     | 6     | fuzzy_number / fuzzy_dict | Financial formulas, ratios, WACC, Altman Z |
 | workflow        | 5     | llm_judge             | Fixed, pre-specified pipeline (do step 1..4) run through the tool loop |
-| agentic         | 5     | llm_judge             | Open-ended: discover data across tools, decide an approach, reconcile messy inputs |
+| agentic         | 7     | llm_judge             | Open-ended: discover data across tools, decide an approach, reconcile messy inputs (incl. building DCF & sum-of-the-parts valuations) |
 | debug           | 3     | functional (unit tests)| Find and fix bugs in financial code |
 
 The split between **workflow** and **agentic** is deliberate. A workflow hands the agent the
@@ -131,7 +131,7 @@ See `harness/judge.py` for the judge prompt and calibration tooling.
 ```
 fincodebench/
 ├── tasks/
-│   └── tasks.json          # 33 task definitions (embedded context, or a tools_data block for agentic tasks)
+│   └── tasks.json          # 35 task definitions (embedded context, or a tools_data block for agentic tasks)
 ├── harness/
 │   ├── providers.py        # Provider registry + unified Anthropic/OpenAI chat client
 │   ├── runner.py           # Executes the model on each task, captures trajectory

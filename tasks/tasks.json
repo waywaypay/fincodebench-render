@@ -511,5 +511,60 @@
         }
       }
     }
+  },
+  {
+    "id": "agentic-006",
+    "category": "agentic",
+    "difficulty": "hard",
+    "prompt": "Your fund is looking at Nimbus Software and needs a defensible intrinsic value per share. Build a discounted-cash-flow valuation from the inputs available to you: decide for yourself how to turn the projections into free cash flow and then into a fair value, and tell us what the stock is worth per share - flagging any input you had to correct or re-source before you trusted it. There's no fixed procedure; choose your approach and justify the assumptions that move the answer.",
+    "context": null,
+    "expected_output": null,
+    "scoring_type": "llm_judge",
+    "rubric": "Score 4 if: the code builds unlevered free cash flow for each forecast year as EBIT*(1-0.25) + D&A - capex - change-in-NWC (= 120, 135, 150, 165, 180), recognizes the 8% WACC in the file is flagged stale and calls fetch_filing('Nimbus Software','2024') to obtain the current WACC (10%), net debt (200) and shares (100m), discounts the five flows plus a Gordon-growth terminal value (TV = 180*1.03/(0.10-0.03) ~ 2,649) at 10% to an enterprise value of ~ $2.20B, bridges EV to equity by subtracting net debt (~ $2.00B), and divides by 100m shares for ~ $20 per share. Score 3 if it fetches the current WACC and lands at ~ $20/share but with a minor slip (e.g. small terminal-value/discount-factor rounding, or thin justification). Score 2 if it values off the stale 8% WACC (landing ~ $29/share - the trap), OR never bridges enterprise value to equity (reporting EV/shares ~ $22 as if it were equity value), OR uses EBIT or EBITDA directly as the cash flow instead of building free cash flow. Score 1 if the approach is sound but it produces no usable per-share figure. Score 0 if no code runs or it crashes.",
+    "max_turns": 8,
+    "tools_data": {
+      "files": {
+        "dcf_inputs.csv": "fiscal_year,revenue_usd_m,ebit_usd_m,d_and_a_usd_m,capex_usd_m,change_in_nwc_usd_m\nFY2025,800,200,20,40,10\nFY2026,880,220,22,42,10\nFY2027,960,240,24,44,10\nFY2028,1040,260,26,46,10\nFY2029,1120,280,28,48,10\n",
+        "dcf_assumptions.txt": "Nimbus Software - DCF model inputs (working draft)\n\nAll figures in USD millions unless stated otherwise.\n- Tax rate: 25%\n- Forecast horizon: 5 explicit years, FY2025-FY2029 (free cash flow to the firm)\n- Terminal value: Gordon growth (perpetuity), long-term growth g = 3.0%\n- Discount rate (WACC): 8.0%   <-- carried over from last year's model\n\nNOTE: the 8.0% WACC above is STALE. It predates this year's refinancing and the\ndebt-funded acquisition, both of which changed the capital structure. Before valuing\nanything, pull the CURRENT WACC and the year-end capital structure (net debt and\nshares outstanding) from the filing service - fetch_filing(\"Nimbus Software\", \"2024\").\nDo not value off the 8.0%.\n"
+      },
+      "filings": {
+        "Nimbus Software": {
+          "2024": {
+            "wacc_pct": 10.0,
+            "net_debt_usd_m": 200,
+            "shares_outstanding_m": 100,
+            "note": "Post-tax WACC of 10.0% is the discount rate disclosed in the FY2024 goodwill-impairment test. Net debt = total debt 250 less cash & equivalents 50 (after the FY2024 debt-funded acquisition). 100.0m shares outstanding at year-end."
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "agentic-007",
+    "category": "agentic",
+    "difficulty": "hard",
+    "prompt": "Atlas Holdings trades as a single stock but runs three very different businesses, and your PM suspects the market is mis-pricing the mix. Produce a sum-of-the-parts valuation to test that: using the data available to you, value the company by its parts, decide how each piece should be valued, deal with anything in the numbers that shouldn't be taken at face value, and arrive at a defensible equity value per share. No fixed steps - choose your approach and show the bridge from the parts down to the per-share figure.",
+    "context": null,
+    "expected_output": null,
+    "scoring_type": "llm_judge",
+    "rubric": "Score 4 if: the code values each segment on its own peer multiple (not one blended multiple on group EBITDA), recognizes the Consumer EBITDA is missing and Industrial's EBITDA looks inflated, and calls fetch_filing('Atlas Holdings','2024') to retrieve the Consumer EBITDA (150), the Industrial one-off (60, so normalized Industrial EBITDA = 260), net debt (580) and shares (100m); computes segment enterprise values Software 200*15 = 3,000, Industrial 260*8 = 2,080 and Consumer 150*10 = 1,500 for a group EV of ~ $6.58B, subtracts net debt to ~ $6.0B of equity, and divides by 100m shares for ~ $60 per share - explicitly treating the one-off as an earnings-quality adjustment. Score 3 if it fetches the data, values by segment and reaches ~ $60/share but with a minor slip (small arithmetic error, or it normalizes the one-off without calling it out). Score 2 if it fails to strip the Industrial one-off (320*8, landing ~ $64.80/share - the trap), OR never fetches the missing Consumer EBITDA and drops a segment (~ $45/share), OR applies a single blended multiple to group EBITDA instead of segment multiples, OR omits the net-debt bridge to equity. Score 1 if the approach is sound but it yields no usable per-share figure. Score 0 if no code runs or it crashes.",
+    "max_turns": 8,
+    "tools_data": {
+      "files": {
+        "atlas_segments.csv": "segment,ebitda_2024_usd_m,peer_ev_ebitda_x\nSoftware,200,15\nIndustrial,320,8\nConsumer,,10\n",
+        "atlas_notes.txt": "Atlas Holdings - sum-of-the-parts working file.\n\n- Segment EBITDA is FY2024, USD millions, from the internal segment ledger.\n- peer_ev_ebitda_x is each segment's listed-peer EV/EBITDA multiple (our estimates).\n- The Consumer segment EBITDA did not come through in this export - pull it from the\n  FY2024 filing.\n- Flag from audit: one operating segment booked a sizeable one-off this year that\n  flatters its reported EBITDA. Confirm the details in the FY2024 filing and value\n  every segment on CLEAN, run-rate EBITDA - not the headline figure.\n- For the equity bridge you'll also need year-end net debt and the share count; both\n  are in the filing, not in this file. fetch_filing(\"Atlas Holdings\", \"2024\").\n"
+      },
+      "filings": {
+        "Atlas Holdings": {
+          "2024": {
+            "consumer_ebitda_usd_m": 150,
+            "industrial_one_off_usd_m": 60,
+            "net_debt_usd_m": 580,
+            "shares_outstanding_m": 100,
+            "note": "Consumer segment FY2024 EBITDA = 150. Industrial's reported FY2024 EBITDA of 320 includes a one-time 60 litigation-settlement gain; underlying run-rate Industrial EBITDA = 260. Group net debt = 580; 100.0m shares outstanding at year-end."
+          }
+        }
+      }
+    }
   }
 ]
