@@ -91,6 +91,28 @@ FETCH_FILING_TOOL = {
     },
 }
 
+WEB_SEARCH_TOOL = {
+    "name": "web_search",
+    "description": (
+        "Search for earnings call transcripts, SEC filings (10-K, 10-Q, 8-K), "
+        "investor day and conference presentations, analyst reports, and other "
+        "public financial information. Returns up to 5 relevant documents with "
+        "title, source, and a content excerpt. Use this for information not "
+        "available in local files or the filing service — such as historical "
+        "precedents, management commentary from calls, or industry comparables."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "query": {
+                "type": "string",
+                "description": "Search query (e.g. company name, topic, document type)",
+            }
+        },
+        "required": ["query"],
+    },
+}
+
 # Default tool set for tasks that declare no data tools (kept as a module global
 # for back-compat with anything importing runner.TOOLS).
 TOOLS = [EXECUTE_PYTHON_TOOL]
@@ -179,6 +201,50 @@ def _fetch_filing(filings: dict, company: str, year) -> str:
     return json.dumps(rec, indent=2)
 
 
+def _web_search(web_results: list, query: str) -> str:
+    """Return canned web search results ranked by keyword overlap with the query.
+
+    Each document in web_results is a dict with 'title', 'source', and 'content'.
+    Ranking is a simple word-overlap score so that reasonable analyst queries
+    reliably surface the relevant documents — the model never sees this logic."""
+    if not query:
+        return "(no query provided)"
+    if not web_results:
+        return "(no web results available for this task)"
+
+    query_terms = set(query.lower().split())
+    scored: list[tuple[int, dict]] = []
+    for doc in web_results:
+        searchable = (
+            doc.get("title", "") + " " +
+            doc.get("source", "") + " " +
+            doc.get("content", "")
+        ).lower()
+        hits = sum(1 for t in query_terms if t in searchable)
+        if hits > 0:
+            scored.append((hits, doc))
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+    top = scored[:5]
+
+    if not top:
+        return "(no results found — try a broader or different query)"
+
+    parts: list[str] = []
+    for rank, (_, doc) in enumerate(top, 1):
+        title = doc.get("title", "(no title)")
+        source = doc.get("source", "")
+        content = doc.get("content", "").strip()
+        if len(content) > 1500:
+            content = content[:1500] + "\n…[excerpt truncated]…"
+        header = f"Result {rank}: {title}"
+        if source:
+            header += f"\nSource: {source}"
+        parts.append(f"{header}\n\n{content}")
+
+    return "\n\n---\n\n".join(parts)
+
+
 def build_task_tools(task: dict):
     """Build the (tools, executors, cleanup) triple for one task.
 
@@ -191,6 +257,7 @@ def build_task_tools(task: dict):
     data = task.get("tools_data") or {}
     files = data.get("files") or {}
     filings = data.get("filings") or {}
+    web_results = data.get("web_results") or []
 
     workdir = None
     if files:
@@ -211,6 +278,9 @@ def build_task_tools(task: dict):
     if filings:
         tools.append(FETCH_FILING_TOOL)
         executors["fetch_filing"] = lambda inp: _fetch_filing(filings, inp.get("company", ""), inp.get("year", ""))
+    if web_results:
+        tools.append(WEB_SEARCH_TOOL)
+        executors["web_search"] = lambda inp: _web_search(web_results, inp.get("query", ""))
 
     def cleanup():
         if workdir:
