@@ -1355,7 +1355,7 @@ function renderCategory(cat){
   // runs scoped to this category, with drill-in
   const rsec=el('div','sec-head'); rsec.innerHTML='<h2>Runs in this category</h2>'; v.append(rsec);
   const note=el('p','note'); note.style.margin='12px 0 0';
-  note.innerHTML=`Only runs triggered for the <b>${esc(cat)}</b> category appear here. Click a completed run for `+
+  note.innerHTML=`Runs covering the <b>${esc(cat)}</b> category appear here (including full benchmark runs). Click a completed run for `+
     `its per-task scores, or see the <a href="#" id="catAllRuns">full results across all runs ↗</a>.`;
   v.append(note);
   const runsWrap=el('div'); runsWrap.id='catRunsWrap'; runsWrap.style.marginTop='18px'; v.append(runsWrap);
@@ -1364,10 +1364,14 @@ function renderCategory(cat){
 
   renderCategoryRuns(cat);
 }
-// A run belongs to a category page when it was triggered scoped to exactly that
-// one category (the dashboard payload carries each run's `categories`).
+// A run belongs to a category page when it covers that category — either a full
+// benchmark run (categories null/empty = all categories) or one explicitly scoped
+// to a set that includes this category.
 function categoryRuns(cat){
-  return STATE.runs.filter(r=>Array.isArray(r.categories) && r.categories.length===1 && r.categories[0]===cat);
+  return STATE.runs.filter(r=>{
+    if(!r.categories||!Array.isArray(r.categories)||r.categories.length===0) return true;
+    return r.categories.includes(cat);
+  });
 }
 function renderCategoryRuns(cat){
   const wrap=$('#catRunsWrap'); if(!wrap) return;
