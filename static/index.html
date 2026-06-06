@@ -132,6 +132,7 @@
   .cat-computation{background:#e9efe6;color:#4d6346;border-color:#dae2d4}
   .cat-workflow{background:#e3efed;color:#356b66;border-color:#cfe4e0}
   .cat-agentic{background:#f4ecdd;color:#7b5d36;border-color:#eaddc7}
+  .cat-agentic_real{background:#efe2cc;color:#6a4a22;border-color:#e2cfae}
   .cat-debug{background:#f3e7e3;color:#7d4a42;border-color:#e9d4cd}
   /* difficulty badges — muted */
   .badge.easy{background:#eaefe7;color:#566b46;border-color:#dbe2d3}
@@ -361,7 +362,7 @@
   <div class="grid cols-4 metrics" id="overviewStats"></div>
 
   <div class="sec-head"><h2>Task categories</h2></div>
-  <p class="lead">Every task belongs to one of six categories. The category determines what is tested; each task's
+  <p class="lead">Every task belongs to one of seven categories. The category determines what is tested; each task's
   scoring method is then chosen to fit the shape of its correct answer (see below). Counts are computed live from the
   loaded task set.</p>
   <div class="bento" id="catBento"></div>
@@ -391,8 +392,8 @@
       distinct from the runner to avoid self-grading) scores the response <b>0–4</b> against a per-task rubric, normalized
       to <code>score / 4</code>. <b>Why:</b> used for workflow and agentic tasks, whose output mixes code, execution and
       prose with no single canonical answer — only a rubric can judge whether the analysis was done well.</p></div>
-    <div class=”card method-card feature” data-method=”pass@0.75”><h3>pass@0.75</h3>
-      <div class=”feature-num”>≥ 0.75</div>
+    <div class="card method-card feature" data-method="pass@0.75"><h3>pass@0.75</h3>
+      <div class="feature-num">≥ 0.75</div>
       <p>The headline rate. Every task is reduced to a normalized score in <b>[0, 1]</b>. If that score hits <b>0.75 or above</b>, the task counts as passed. <code>pass@0.75</code> is simply the share of tasks that passed — so a result of <b>46%</b> means the model cleared the bar on 46% of tasks and fell short on the other 54%. Reported overall and per category alongside the mean score.</p></div>
   </div>
 
@@ -454,6 +455,7 @@
         <option value="computation">Category: computation</option>
         <option value="workflow">Category: workflow</option>
         <option value="agentic">Category: agentic</option>
+        <option value="agentic_real">Category: agentic_real</option>
         <option value="debug">Category: debug</option>
       </select>
       <input id="runTask" placeholder="…or a single task id e.g. codegen-001" style="flex:1">
@@ -481,13 +483,14 @@
 const STATE = {tasks:[], runs:[], providers:[], selectedRun:null, resultsCollapsed:false,
   globalForm:null, activeCategory:null, selectedCatRun:null, catColors:{
   extraction:'#5b7c99', code_generation:'#7d6794', computation:'#5f7e55',
-  workflow:'#3f8079', agentic:'#a6793f', debug:'#a85a4f'}};
+  workflow:'#3f8079', agentic:'#a6793f', agentic_real:'#7a5223', debug:'#a85a4f'}};
 const CAT_DESC = {
   extraction:'Parse financial tables, filings, and press releases into structured data.',
   code_generation:'Write correct financial functions from a spec.',
   computation:'Financial formulas and ratios — gross margin, WACC, Altman Z-Score.',
   workflow:'Fixed, pre-specified pipeline run through the tool loop — the steps are given; the agent executes and self-corrects.',
   agentic:'Open-ended: discover data across multiple tools, decide an approach, reconcile messy inputs, then conclude.',
+  agentic_real:'Open-ended analysis of real companies — pull data from real SEC filings and live web search (served from reproducible snapshots), then compute and conclude.',
   debug:'Find and fix bugs in broken financial code.'};
 // Long-form explanation of each scoring method, surfaced when a method card is
 // clicked. Kept faithful to the harness (scorer.py / judge.py / eval.py).
@@ -754,7 +757,7 @@ function renderOverview(){
     cats[t.category].n++; cats[t.category].methods.add(t.scoring_type);
     diffs[t.difficulty]=(diffs[t.difficulty]||0)+1;
   });
-  const order=['extraction','code_generation','computation','workflow','agentic','debug'];
+  const order=['extraction','code_generation','computation','workflow','agentic','agentic_real','debug'];
   // top-line metric blocks
   $('#overviewStats').innerHTML='';
   const stats=[['Tasks',STATE.tasks.length],['Categories',Object.keys(cats).length],
@@ -765,7 +768,9 @@ function renderOverview(){
   // bento grid of categories (replaces the old data table)
   const bento=$('#catBento'); bento.innerHTML='';
   const shown=order.filter(c=>cats[c]);
-  const spanFor=i=> shown.length===5 ? [2,2,2,3,3][i] : 2;
+  // bento spans across a 6-column grid; each row sums to 6 for a balanced layout.
+  const spanMap={5:[2,2,2,3,3],6:[2,2,2,2,2,2],7:[3,3,2,2,2,3,3]};
+  const spanFor=i=> (spanMap[shown.length]||[])[i] || 2;
   shown.forEach((c,i)=>{
     const card=el('div','bento-card clickable');
     card.style.gridColumn='span '+spanFor(i);
@@ -830,18 +835,30 @@ function targetHtml(t){
   return '<div class="muted">—</div>';
 }
 // Agentic tasks carry their data behind tools (no inline context); show the
-// tool set, each seeded file, and the fetch_filing records the agent can pull.
+// tool set, each seeded file, and the records the agent can pull. agentic_real
+// tasks instead expose live tools (web_search / fetch_sec_filing) answered from
+// reproducible snapshots, so surface those records too.
 function toolsDataHtml(t){
   const td=t.tools_data; if(!td) return '';
   const files=td.files||{}, filings=td.filings||{}, fnames=Object.keys(files);
+  const snaps=td.snapshots||{};
   const tools=['execute_python'];
   if(fnames.length) tools.push('list_files','read_file');
   if(Object.keys(filings).length) tools.push('fetch_filing');
+  if(snaps.fetch_sec_filing) tools.push('fetch_sec_filing');
+  if(snaps.web_search) tools.push('web_search');
   let h=`<div class="label">Tools &amp; data available to the agent</div>`;
   h+=`<p class="note" style="margin:4px 0 8px">Tools: ${tools.map(x=>`<code>${esc(x)}</code>`).join(', ')}</p>`;
   h+=fnames.map(fn=>`<details style="margin-top:6px"><summary class="muted-note" style="cursor:pointer">file · ${esc(fn)}</summary><pre>${esc(files[fn])}</pre></details>`).join('');
   if(Object.keys(filings).length)
     h+=`<details style="margin-top:6px"><summary class="muted-note" style="cursor:pointer">fetch_filing records (not on disk)</summary><pre>${esc(JSON.stringify(filings,null,2))}</pre></details>`;
+  // snapshot-backed live tools: one collapsible per (tool, query) record.
+  Object.entries(snaps).forEach(([tool,recs])=>{
+    if(!recs || typeof recs!=='object') return;
+    Object.entries(recs).forEach(([q,resp])=>{
+      h+=`<details style="margin-top:6px"><summary class="muted-note" style="cursor:pointer">${esc(tool)} · ${esc(q)}</summary><pre>${esc(typeof resp==='string'?resp:JSON.stringify(resp,null,2))}</pre></details>`;
+    });
+  });
   return h;
 }
 
@@ -1031,7 +1048,7 @@ function renderReport(rep, body=$('#resultsBody')){
     '<span style="color:var(--red)">■ &lt;50%</span> '+
     '<span style="color:var(--gray)">■ unscored</span>'));
   const byCat={}; (rep.task_scores||[]).forEach(t=>{(byCat[t.category]=byCat[t.category]||[]).push(t);});
-  ['extraction','code_generation','computation','workflow','agentic','debug'].filter(c=>byCat[c]).forEach(c=>{
+  ['extraction','code_generation','computation','workflow','agentic','agentic_real','debug'].filter(c=>byCat[c]).forEach(c=>{
     const g=el('div','heatgroup'); g.append(el('div','gl',c));
     const row=el('div','heat');
     byCat[c].forEach(t=>{const cell=el('div','cell');cell.style.background=scoreColor(t.score);
