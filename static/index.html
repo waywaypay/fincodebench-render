@@ -1202,10 +1202,12 @@ function boxPlotCard(taskScores){
   function redraw(){
     const m=MODES[modeIdx];
     btns.forEach((b,i)=>b.classList.toggle('active',i===modeIdx));
+    const isStrip=m.key==='score';
+    note.innerHTML=isStrip?'Each dot = one task · ◇ = mean':'Box = IQR (Q1–Q3) · line = median · whiskers = 1.5× IQR · ◇ = mean · dots = outliers';
 
     const catData=activeCats.map(cat=>{
       const vals=taskScores.filter(t=>t.category===cat&&t[m.key]!=null).map(t=>t[m.key]);
-      return {cat, stats:quartiles(vals)};
+      return {cat, vals, stats:quartiles(vals)};
     }).filter(d=>d.stats);
 
     if(!catData.length){svgWrap.innerHTML='<p class="note">No data for this view.</p>';return;}
@@ -1235,7 +1237,6 @@ function boxPlotCard(taskScores){
       const cy=P.t+(i+.5)*ROW_H;
       const {q1,med,q3,wLo,wHi,mean,outliers,n}=d.stats;
       const col=CAT_COLORS[d.cat]||{fill:'#f0ede6',stroke:'#76746b'};
-      const capH=BOX_H*.45;
 
       // category label + n count
       const lbl=se('text',{x:P.l-8,y:cy+1,'text-anchor':'end','font-size':11,'font-family':'var(--sans)',fill:'var(--text)'});
@@ -1243,44 +1244,59 @@ function boxPlotCard(taskScores){
       const nl=se('text',{x:P.l-8,y:cy+13,'text-anchor':'end','font-size':9.5,'font-family':'var(--mono)',fill:'var(--faint)'});
       nl.textContent=`n=${n}`; svg.append(nl);
 
-      // whisker stem
-      svg.append(se('line',{x1:scX(wLo),y1:cy,x2:scX(wHi),y2:cy,stroke:col.stroke,'stroke-width':1.5,'stroke-opacity':.5}));
-
-      // whisker caps
-      [wLo,wHi].forEach(w=>svg.append(se('line',{x1:scX(w),y1:cy-capH,x2:scX(w),y2:cy+capH,stroke:col.stroke,'stroke-width':1.5})));
-
-      // IQR box
-      const bx=scX(q1), bw=Math.max(scX(q3)-scX(q1),2);
-      const box=se('rect',{x:bx,y:cy-BOX_H/2,width:bw,height:BOX_H,fill:col.fill,stroke:col.stroke,'stroke-width':1.5,rx:3});
-      const tipHtml=`<b>${d.cat}</b> <span style="color:var(--faint)">n=${n}</span><br>`+
-        `Median: <b>${m.fmt(med)}</b> &nbsp; Mean: ${m.fmt(mean)}<br>`+
-        `Q1: ${m.fmt(q1)} &nbsp; Q3: ${m.fmt(q3)}<br>`+
-        `Range: ${m.fmt(wLo)} – ${m.fmt(wHi)}`+
-        (outliers.length?`<br><span style="color:var(--muted)">${outliers.length} outlier${outliers.length>1?'s':''}</span>`:'');
-      box.addEventListener('mouseenter',e=>showTip(e,tipHtml));
-      box.addEventListener('mousemove',moveTip);
-      box.addEventListener('mouseleave',()=>{tip.style.display='none';});
-      svg.append(box);
-
-      // median line
-      svg.append(se('line',{x1:scX(med),y1:cy-BOX_H/2,x2:scX(med),y2:cy+BOX_H/2,stroke:col.stroke,'stroke-width':2.5}));
-
-      // mean diamond
-      const mx=scX(mean), ds=4;
-      const diamond=se('polygon',{points:`${mx},${cy-ds} ${mx+ds},${cy} ${mx},${cy+ds} ${mx-ds},${cy}`,fill:'white',stroke:col.stroke,'stroke-width':1.5});
-      diamond.addEventListener('mouseenter',e=>showTip(e,`<b>${d.cat}</b> mean: <b>${m.fmt(mean)}</b>`));
-      diamond.addEventListener('mousemove',moveTip);
-      diamond.addEventListener('mouseleave',()=>{tip.style.display='none';});
-      svg.append(diamond);
-
-      // outlier dots
-      outliers.forEach(v=>{
-        const dot=se('circle',{cx:scX(v),cy,r:3,fill:'white',stroke:col.stroke,'stroke-width':1.5});
-        dot.addEventListener('mouseenter',e=>showTip(e,`<b>${d.cat}</b> outlier: <b>${m.fmt(v)}</b>`));
-        dot.addEventListener('mousemove',moveTip);
-        dot.addEventListener('mouseleave',()=>{tip.style.display='none';});
-        svg.append(dot);
-      });
+      if(isStrip){
+        // strip/dot plot: one dot per task score with y-jitter
+        d.vals.forEach((v,idx)=>{
+          const jitter=(((idx*7+13)%17)/17-0.5)*BOX_H*0.85;
+          const dot=se('circle',{cx:scX(v),cy:cy+jitter,r:3.5,fill:col.fill,stroke:col.stroke,'stroke-width':1.5});
+          dot.addEventListener('mouseenter',e=>showTip(e,`<b>${d.cat}</b>: <b>${m.fmt(v)}</b>`));
+          dot.addEventListener('mousemove',moveTip);
+          dot.addEventListener('mouseleave',()=>{tip.style.display='none';});
+          svg.append(dot);
+        });
+        // mean diamond on top
+        const mx=scX(mean), ds=5;
+        const diamond=se('polygon',{points:`${mx},${cy-ds} ${mx+ds},${cy} ${mx},${cy+ds} ${mx-ds},${cy}`,fill:'white',stroke:col.stroke,'stroke-width':1.5});
+        diamond.addEventListener('mouseenter',e=>showTip(e,`<b>${d.cat}</b> mean: <b>${m.fmt(mean)}</b>`));
+        diamond.addEventListener('mousemove',moveTip);
+        diamond.addEventListener('mouseleave',()=>{tip.style.display='none';});
+        svg.append(diamond);
+      } else {
+        const capH=BOX_H*.45;
+        // whisker stem
+        svg.append(se('line',{x1:scX(wLo),y1:cy,x2:scX(wHi),y2:cy,stroke:col.stroke,'stroke-width':1.5,'stroke-opacity':.5}));
+        // whisker caps
+        [wLo,wHi].forEach(w=>svg.append(se('line',{x1:scX(w),y1:cy-capH,x2:scX(w),y2:cy+capH,stroke:col.stroke,'stroke-width':1.5})));
+        // IQR box
+        const bx=scX(q1), bw=Math.max(scX(q3)-scX(q1),2);
+        const box=se('rect',{x:bx,y:cy-BOX_H/2,width:bw,height:BOX_H,fill:col.fill,stroke:col.stroke,'stroke-width':1.5,rx:3});
+        const tipHtml=`<b>${d.cat}</b> <span style="color:var(--faint)">n=${n}</span><br>`+
+          `Median: <b>${m.fmt(med)}</b> &nbsp; Mean: ${m.fmt(mean)}<br>`+
+          `Q1: ${m.fmt(q1)} &nbsp; Q3: ${m.fmt(q3)}<br>`+
+          `Range: ${m.fmt(wLo)} – ${m.fmt(wHi)}`+
+          (outliers.length?`<br><span style="color:var(--muted)">${outliers.length} outlier${outliers.length>1?'s':''}</span>`:'');
+        box.addEventListener('mouseenter',e=>showTip(e,tipHtml));
+        box.addEventListener('mousemove',moveTip);
+        box.addEventListener('mouseleave',()=>{tip.style.display='none';});
+        svg.append(box);
+        // median line
+        svg.append(se('line',{x1:scX(med),y1:cy-BOX_H/2,x2:scX(med),y2:cy+BOX_H/2,stroke:col.stroke,'stroke-width':2.5}));
+        // mean diamond
+        const mx=scX(mean), ds=4;
+        const diamond=se('polygon',{points:`${mx},${cy-ds} ${mx+ds},${cy} ${mx},${cy+ds} ${mx-ds},${cy}`,fill:'white',stroke:col.stroke,'stroke-width':1.5});
+        diamond.addEventListener('mouseenter',e=>showTip(e,`<b>${d.cat}</b> mean: <b>${m.fmt(mean)}</b>`));
+        diamond.addEventListener('mousemove',moveTip);
+        diamond.addEventListener('mouseleave',()=>{tip.style.display='none';});
+        svg.append(diamond);
+        // outlier dots
+        outliers.forEach(v=>{
+          const dot=se('circle',{cx:scX(v),cy,r:3,fill:'white',stroke:col.stroke,'stroke-width':1.5});
+          dot.addEventListener('mouseenter',e=>showTip(e,`<b>${d.cat}</b> outlier: <b>${m.fmt(v)}</b>`));
+          dot.addEventListener('mousemove',moveTip);
+          dot.addEventListener('mouseleave',()=>{tip.style.display='none';});
+          svg.append(dot);
+        });
+      }
     });
 
     svgWrap.innerHTML=''; svgWrap.append(svg);
