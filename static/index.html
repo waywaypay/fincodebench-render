@@ -227,6 +227,10 @@
     justify-content:flex-end;color:#fff;font-size:11.5px;font-weight:600;padding-right:8px;
     min-width:30px;transition:width .5s cubic-bezier(.2,.7,.2,1)}
   .chart-row .cn{width:46px;color:var(--faint);font-size:12px;font-variant-numeric:tabular-nums}
+  .scatter-toggle{display:flex;gap:6px;margin:10px 0 18px;flex-wrap:wrap}
+  .scatter-toggle button{padding:4px 11px;font-size:12px;border-radius:20px;border:1px solid var(--border);background:transparent;cursor:pointer;font-family:var(--sans);color:var(--muted);transition:background .12s,color .12s,border-color .12s}
+  .scatter-toggle button:hover{background:var(--panel)}
+  .scatter-toggle button.active{background:var(--ink);color:var(--bg);border-color:var(--ink)}
   .heat{display:flex;flex-wrap:wrap;gap:6px}
   .heat .cell{width:25px;height:25px;border-radius:7px;cursor:pointer;
     box-shadow:inset 0 0 0 1px rgba(0,0,0,.04);
@@ -1120,68 +1124,100 @@ function renderReport(rep, body=$('#resultsBody'), filterCategory=null){
 }
 function scatterCard(taskScores){
   const c=el('div','card');
-  c.append(el('h3',null,'Cost vs latency per task'));
-  const pts=taskScores.filter(t=>t.elapsed!=null&&t.cost!=null);
-  if(!pts.length){c.append(el('p','note','No timing/cost data.'));return c;}
+  c.append(el('h3',null,'Task scatter'));
+
+  const MODES=[
+    {label:'Cost vs Latency',    xk:'elapsed',yk:'cost', xl:'Latency', yl:'Cost',    xfmt:fmtDuration,yfmt:fmtCost,xmax:null,ymax:null},
+    {label:'Accuracy vs Latency',xk:'elapsed',yk:'score',xl:'Latency', yl:'Accuracy',xfmt:fmtDuration,yfmt:pct,   xmax:null,ymax:1   },
+    {label:'Cost vs Accuracy',   xk:'score',  yk:'cost', xl:'Accuracy',yl:'Cost',    xfmt:pct,        yfmt:fmtCost,xmax:1,   ymax:null},
+  ].filter(m=>taskScores.some(t=>t[m.xk]!=null&&t[m.yk]!=null));
+
+  if(!MODES.length){c.append(el('p','note','No data to plot.'));return c;}
+
   const note=el('p','note');
   note.innerHTML='Each dot is one task · color = score (<span style="color:var(--green)">■ ≥75%</span> '+
     '<span style="color:var(--amber)">■ 50–75%</span> <span style="color:var(--red)">■ &lt;50%</span>) · click to inspect';
   c.append(note);
 
-  const W=560,H=280,P={t:16,r:20,b:50,l:70};
-  const iW=W-P.l-P.r, iH=H-P.t-P.b;
-  const maxX=Math.max(...pts.map(t=>t.elapsed))*1.08||1;
-  const maxY=Math.max(...pts.map(t=>t.cost))*1.08||0.0001;
-  const scX=v=>P.l+(v/maxX)*iW;
-  const scY=v=>P.t+iH-(v/maxY)*iH;
+  let modeIdx=0;
+  const btns=[];
+  const tbar=el('div','scatter-toggle');
+  MODES.forEach((m,i)=>{
+    const btn=document.createElement('button');
+    btn.textContent=m.label;
+    btn.onclick=()=>{modeIdx=i;redraw();};
+    tbar.append(btn); btns.push(btn);
+  });
+  c.append(tbar);
 
+  const W=560,H=280,P={t:16,r:20,b:50,l:70};
+  const iW=W-P.l-P.r,iH=H-P.t-P.b;
   const ns='http://www.w3.org/2000/svg';
   const se=(tag,a={})=>{const e=document.createElementNS(ns,tag);Object.entries(a).forEach(([k,v])=>e.setAttribute(k,v));return e;};
-  const svg=se('svg',{viewBox:`0 0 ${W} ${H}`,style:`width:100%;max-width:${W}px;height:auto;display:block;overflow:visible`});
-
-  const TICKS=4;
-  for(let i=0;i<=TICKS;i++){
-    const x=P.l+(iW/TICKS)*i;
-    svg.append(se('line',{x1:x,y1:P.t,x2:x,y2:P.t+iH,stroke:'var(--line)','stroke-width':1}));
-    const xt=se('text',{x,y:P.t+iH+16,'text-anchor':'middle','font-size':11,fill:'var(--faint)','font-family':'var(--mono)'});
-    xt.textContent=fmtDuration((maxX/TICKS)*i);
-    svg.append(xt);
-    const y=P.t+(iH/TICKS)*i;
-    svg.append(se('line',{x1:P.l,y1:y,x2:P.l+iW,y2:y,stroke:'var(--line)','stroke-width':1}));
-    const yt=se('text',{x:P.l-8,y:y+4,'text-anchor':'end','font-size':11,fill:'var(--faint)','font-family':'var(--mono)'});
-    yt.textContent=fmtCost(maxY-(maxY/TICKS)*i);
-    svg.append(yt);
-  }
-
-  const xl=se('text',{x:P.l+iW/2,y:H-6,'text-anchor':'middle','font-size':12,fill:'var(--muted)'});
-  xl.textContent='Latency'; svg.append(xl);
-  const yl=se('text',{x:12,y:P.t+iH/2,'text-anchor':'middle','font-size':12,fill:'var(--muted)',transform:`rotate(-90,12,${P.t+iH/2})`});
-  yl.textContent='Cost'; svg.append(yl);
 
   const wrap=el('div'); wrap.style.position='relative';
-  const tip=el('div'); tip.style.cssText='position:absolute;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:8px 12px;font-size:12.5px;line-height:1.55;pointer-events:none;display:none;z-index:20;white-space:nowrap;box-shadow:var(--shadow)';
-  wrap.append(svg); wrap.append(tip); c.append(wrap);
+  const svgWrap=el('div');
+  const tip=el('div');
+  tip.style.cssText='position:absolute;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:8px 12px;font-size:12.5px;line-height:1.55;pointer-events:none;display:none;z-index:20;white-space:nowrap;box-shadow:var(--shadow)';
+  wrap.append(svgWrap); wrap.append(tip); c.append(wrap);
 
-  pts.forEach(t=>{
-    const dot=se('circle',{cx:scX(t.elapsed),cy:scY(t.cost),r:5.5,fill:scoreColor(t.score),stroke:'white','stroke-width':1.5});
-    dot.style.cursor='pointer';
-    dot.setAttribute('tabindex','0'); dot.setAttribute('role','button');
-    dot.setAttribute('aria-label',`${t.task_id} — ${pct(t.score)}, ${fmtDuration(t.elapsed)}, ${fmtCost(t.cost)}`);
-    dot.addEventListener('mouseenter',()=>{
-      tip.innerHTML=`<b style="font-family:var(--mono)">${esc(t.task_id)}</b><br>Latency: ${fmtDuration(t.elapsed)}<br>Cost: ${fmtCost(t.cost)}<br>Score: ${pct(t.score)}`;
-      tip.style.display='block';
+  function redraw(){
+    const m=MODES[modeIdx];
+    btns.forEach((b,i)=>b.classList.toggle('active',i===modeIdx));
+    const pts=taskScores.filter(t=>t[m.xk]!=null&&t[m.yk]!=null);
+    if(!pts.length){svgWrap.innerHTML='<p class="note">No data for this view.</p>';return;}
+
+    const rawMaxX=Math.max(...pts.map(t=>t[m.xk]));
+    const rawMaxY=Math.max(...pts.map(t=>t[m.yk]));
+    const maxX=m.xmax??rawMaxX*1.08||1;
+    const maxY=m.ymax??rawMaxY*1.08||0.0001;
+    const scX=v=>P.l+(v/maxX)*iW;
+    const scY=v=>P.t+iH-(v/maxY)*iH;
+
+    const svg=se('svg',{viewBox:`0 0 ${W} ${H}`,style:`width:100%;max-width:${W}px;height:auto;display:block;overflow:visible`});
+
+    const TICKS=4;
+    for(let i=0;i<=TICKS;i++){
+      const x=P.l+(iW/TICKS)*i;
+      svg.append(se('line',{x1:x,y1:P.t,x2:x,y2:P.t+iH,stroke:'var(--line)','stroke-width':1}));
+      const xt=se('text',{x,y:P.t+iH+16,'text-anchor':'middle','font-size':11,fill:'var(--faint)','font-family':'var(--mono)'});
+      xt.textContent=m.xfmt((maxX/TICKS)*i); svg.append(xt);
+      const y=P.t+(iH/TICKS)*i;
+      svg.append(se('line',{x1:P.l,y1:y,x2:P.l+iW,y2:y,stroke:'var(--line)','stroke-width':1}));
+      const yt=se('text',{x:P.l-8,y:y+4,'text-anchor':'end','font-size':11,fill:'var(--faint)','font-family':'var(--mono)'});
+      yt.textContent=m.yfmt(maxY-(maxY/TICKS)*i); svg.append(yt);
+    }
+
+    const xl=se('text',{x:P.l+iW/2,y:H-6,'text-anchor':'middle','font-size':12,fill:'var(--muted)'});
+    xl.textContent=m.xl; svg.append(xl);
+    const yl=se('text',{x:12,y:P.t+iH/2,'text-anchor':'middle','font-size':12,fill:'var(--muted)',transform:`rotate(-90,12,${P.t+iH/2})`});
+    yl.textContent=m.yl; svg.append(yl);
+
+    pts.forEach(t=>{
+      const dot=se('circle',{cx:scX(t[m.xk]),cy:scY(t[m.yk]),r:5.5,fill:scoreColor(t.score),stroke:'white','stroke-width':1.5});
+      dot.style.cursor='pointer';
+      dot.setAttribute('tabindex','0'); dot.setAttribute('role','button');
+      dot.setAttribute('aria-label',`${t.task_id} — ${pct(t.score)}, ${fmtDuration(t.elapsed)}, ${fmtCost(t.cost)}`);
+      dot.addEventListener('mouseenter',()=>{
+        tip.innerHTML=`<b style="font-family:var(--mono)">${esc(t.task_id)}</b><br>Latency: ${fmtDuration(t.elapsed)}<br>Cost: ${fmtCost(t.cost)}<br>Score: ${pct(t.score)}`;
+        tip.style.display='block';
+      });
+      dot.addEventListener('mousemove',e=>{
+        const pr=wrap.getBoundingClientRect();
+        let lx=e.clientX-pr.left+14,ty=e.clientY-pr.top-14;
+        if(lx+210>pr.width) lx=e.clientX-pr.left-200;
+        tip.style.left=lx+'px'; tip.style.top=ty+'px';
+      });
+      dot.addEventListener('mouseleave',()=>{tip.style.display='none';});
+      dot.addEventListener('click',()=>openTaskModal(t));
+      dot.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openTaskModal(t);}});
+      svg.append(dot);
     });
-    dot.addEventListener('mousemove',e=>{
-      const pr=wrap.getBoundingClientRect();
-      let lx=e.clientX-pr.left+14, ty=e.clientY-pr.top-14;
-      if(lx+210>pr.width) lx=e.clientX-pr.left-200;
-      tip.style.left=lx+'px'; tip.style.top=ty+'px';
-    });
-    dot.addEventListener('mouseleave',()=>{tip.style.display='none';});
-    dot.addEventListener('click',()=>openTaskModal(t));
-    dot.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openTaskModal(t);}});
-    svg.append(dot);
-  });
+
+    svgWrap.innerHTML=''; svgWrap.append(svg);
+  }
+
+  redraw();
   return c;
 }
 function chartCard(title, items){
