@@ -448,6 +448,7 @@ class RunRequest(BaseModel):
     provider: Optional[str] = None      # anthropic (default), openai, openrouter, deepseek, qwen, kimi, venice
     model: Optional[str] = None         # runner model override (defaults to provider's)
     judge_model: Optional[str] = None   # judge model override (defaults to provider's)
+    label: Optional[str] = None         # optional human-friendly tag to delineate this run (e.g. "baseline", "kimi-vs-opus")
 
     def validate_categories(self):
         if self.categories:
@@ -605,6 +606,10 @@ def create_run(
 
     model = (req.model or "").strip() or cfg["default_model"]
     judge_model = (req.judge_model or "").strip() or cfg["default_judge_model"]
+    # Optional, free-text run label to delineate runs (capped so it can't bloat
+    # the index). Empty/whitespace-only collapses to None so the dashboard can
+    # treat "no label" uniformly.
+    label = (req.label or "").strip()[:80] or None
 
     run_id = datetime.utcnow().strftime("%Y%m%d_%H%M%S") + "_" + str(uuid.uuid4())[:8]
 
@@ -621,6 +626,7 @@ def create_run(
             "provider": provider,
             "model": model,
             "judge_model": judge_model,
+            "label": label,
         }
         _save_registry(reg)
 
