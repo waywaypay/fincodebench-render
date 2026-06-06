@@ -434,6 +434,19 @@ def run_task(task: dict, verbose: bool = True) -> dict:
     if task.get("context"):
         prompt = f"**Context / Data:**\n```\n{task['context']}\n```\n\n**Task:**\n{prompt}"
 
+    # Functional tasks are graded by executing the submitted function against a
+    # hidden test suite. The model already has an execute_python tool, but with a
+    # tight turn budget it tends to one-shot the answer untested. Nudging it to
+    # actually run and fix its code — and to put the final solution in one code
+    # block — is the main lever on functional scores (the model still never sees
+    # the grading tests, so this rewards self-testing, not overfitting).
+    if task.get("scoring_type") == "functional":
+        prompt += (
+            "\n\nYou have an execute_python tool — use it to test your implementation "
+            "on your own examples and fix any failures before finalizing. Your final "
+            "message must contain the complete solution in a single ```python code block."
+        )
+
     # Neutral message history (provider-agnostic — see providers.ChatClient)
     messages = [{"role": "user", "content": prompt}]
     trajectory = []

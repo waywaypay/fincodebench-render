@@ -150,3 +150,76 @@ def test_debug_002_accepts_correct_solution():
 def test_debug_002_rejects_prediction_free_solution():
     code = "```python\n" + _LAZY_BACKTEST + "\n```"
     assert scorer.score_functional(code, TASKS["debug-002"]["test_code"])["score"] == 0.0
+
+
+# ── Fixed "gotcha" code_generation tasks: a prompt-compliant solver must pass ───
+# These three tasks previously had a mismatch between what the prompt described
+# and what the hidden test demanded (an undocumented 4th arg, an under-specified
+# adjustment formula). A reference implementation written strictly from the
+# clarified prompt must now score 1.0 — locking the prompt and test together so a
+# future prompt edit that re-introduces the gap is caught here.
+_SLOAN = """
+def compute_sloan_accruals(net_income, cfo, cfi, avg_assets):
+    total_accruals = net_income - (cfo + cfi)
+    accrual_ratio = total_accruals / avg_assets
+    return {"total_accruals": total_accruals,
+            "accrual_ratio": accrual_ratio,
+            "quality_flag": accrual_ratio > 0.05}
+"""
+
+_RECENCY = """
+def recency_weighted_forecast(revenues, weights_decay=0.9):
+    import numpy as np
+    n = len(revenues)
+    x = np.arange(n, dtype=float)
+    y = np.array(revenues, dtype=float)
+    w = np.array([weights_decay ** (n - 1 - i) for i in range(n)], dtype=float)
+    W = np.diag(w)
+    X = np.column_stack([np.ones(n), x])
+    beta = np.linalg.solve(X.T @ W @ X, X.T @ W @ y)
+    return float(beta[0] + beta[1] * n)
+"""
+
+_FORECASTER = """
+class RevenueForecaster:
+    def __init__(self, beat_rate=0.7):
+        self.beat_rate = beat_rate
+        self._actuals = []
+        self._guidance = []
+    def add_quarter(self, actual, guidance_low, guidance_high):
+        self._actuals.append(actual)
+        self._guidance.append((guidance_low, guidance_high))
+    def forecast(self):
+        import numpy as np
+        lo, hi = self._guidance[-1]
+        mid = (lo + hi) / 2
+        n = len(self._actuals)
+        slope, intercept = np.polyfit(np.arange(n), np.array(self._actuals, dtype=float), 1)
+        return {
+            "naive": self._actuals[-1],
+            "guidance_adjusted": mid * (1 + (self.beat_rate - 0.5) * 0.02),
+            "trend": float(intercept + slope * n),
+        }
+"""
+
+
+def test_codegen_005_sloan_signature_is_satisfiable():
+    code = "```python\n" + _SLOAN + "\n```"
+    assert scorer.score_functional(code, TASKS["codegen-005"]["test_code"])["score"] == 1.0
+
+
+def test_codegen_008_recency_weighted_forecast_passes():
+    code = "```python\n" + _RECENCY + "\n```"
+    assert scorer.score_functional(code, TASKS["codegen-008"]["test_code"])["score"] == 1.0
+
+
+def test_codegen_009_forecaster_formula_passes():
+    code = "```python\n" + _FORECASTER + "\n```"
+    assert scorer.score_functional(code, TASKS["codegen-009"]["test_code"])["score"] == 1.0
+
+
+def test_all_code_generation_tasks_have_room_to_iterate():
+    # Phase 3: codegen tasks must allow enough turns to self-test via execute_python.
+    for t in TASKS.values():
+        if t["category"] == "code_generation":
+            assert t["max_turns"] >= 8, f"{t['id']} max_turns={t['max_turns']} (<8)"

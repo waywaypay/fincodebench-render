@@ -220,6 +220,74 @@ def llm_judge(
     return judgment
 
 
+# ── Diagnostic judge (failure classification, NOT scoring) ─────────────────────
+# Functional tasks are graded by execution (0 or 1). When one fails we still want
+# to know *why*, so we can tell a benchmark-fault failure (the test demanded an
+# exact signature the prompt never stated) from a genuine capability failure (the
+# model used the wrong formula). This classifier runs ONLY on failures, never
+# produces a score, and never changes one — its output is stored alongside the
+# score for later analysis and aggregated into the report's failure breakdown.
+DIAGNOSTIC_SYSTEM = """You classify why a Python solution failed a financial-coding unit test.
+
+Given the task prompt, the code the model submitted, the hidden test harness, and the
+error output, choose EXACTLY ONE category that best explains the failure:
+
+- wrong_formula: the code runs but computes the wrong financial logic or result
+- signature_mismatch: the logic looks right but the function name, arguments, or return type/shape don't match what the test calls
+- edge_case: core logic is right but an edge case (division by zero, empty input, None handling) is mishandled
+- extraction_failure: there is no usable Python code to run (the answer was prose, or the code block was malformed)
+- runtime_error: the code crashes for a reason unrelated to financial correctness (syntax error, bad import, name error)
+
+Respond with ONLY a JSON object, no preamble or fences:
+{"failure_type": "<one category>", "explanation": "<one short sentence>"}"""
+
+_DIAGNOSTIC_FAILURE_TYPES = {
+    "wrong_formula", "signature_mismatch", "edge_case",
+    "extraction_failure", "runtime_error",
+}
+
+
+def diagnostic_failure_judge(
+    task_prompt: str,
+    model_code: str,
+    test_code: str,
+    error_output: str,
+) -> dict:
+    """Categorize WHY a functional test failed. Diagnostic only — returns a
+    {failure_type, explanation, method} dict, never a score. Safe by construction:
+    on any error or unparseable verdict it falls back to 'runtime_error' rather
+    than raising, so it can never break the scoring path that calls it."""
+    parts = [
+        f"**Task prompt:**\n{(task_prompt or '')[:1200]}",
+        f"**Submitted code:**\n```python\n{(model_code or '')[:3000]}\n```",
+        f"**Hidden test harness:**\n```python\n{(test_code or '')[:1200]}\n```",
+        f"**Error / output:**\n{(error_output or '')[:600]}",
+    ]
+    try:
+        result = client.create(
+            model=JUDGE_MODEL,
+            max_tokens=150,
+            system=DIAGNOSTIC_SYSTEM,
+            messages=[{"role": "user", "content": "\n\n".join(parts)}],
+        )
+        parsed = _extract_judge_json((result.text or "").strip())
+    except Exception as e:
+        return {"failure_type": "runtime_error",
+                "explanation": f"diagnostic call failed: {str(e)[:120]}",
+                "method": "diagnostic_judge"}
+
+    if not parsed or "failure_type" not in parsed:
+        return {"failure_type": "runtime_error",
+                "explanation": "diagnostic parse error",
+                "method": "diagnostic_judge"}
+    ft = parsed.get("failure_type")
+    if ft not in _DIAGNOSTIC_FAILURE_TYPES:
+        ft = "runtime_error"
+    return {"failure_type": ft,
+            "explanation": (parsed.get("explanation") or "")[:300],
+            "method": "diagnostic_judge"}
+
+
 def score_pending_judge_tasks(
     results: list[dict],
     tasks: dict,

@@ -363,10 +363,11 @@ def _execute_run(run_id: str, task_ids: Optional[list], categories: Optional[lis
 
         # Score deterministic
         _progress("scoring")(len(results), len(results), None)
+        run_diag = os.environ.get("FINCODEBENCH_DIAGNOSTIC_JUDGE", "").lower() in ("1", "true", "yes")
         for result in results:
             task = tasks_map.get(result["task_id"])
             if task and task.get("scoring_type") != "llm_judge":
-                result["score_result"] = score_task(task, result)
+                result["score_result"] = score_task(task, result, run_diagnostic=run_diag)
 
         # LLM judge
         calib_path = str(run_dir / "calibration_template.json")
