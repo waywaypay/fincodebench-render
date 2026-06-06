@@ -306,7 +306,7 @@
   .run-row.active .run-when::before{content:"▾";color:var(--faint);font-size:9px;
     font-weight:400;line-height:1;transform:translateY(.5px)}
   .run-row.active.collapsed .run-when::before{content:"▸"}
-  #resultsBody.collapsed{display:none}
+  #resultsBody.collapsed,#catResultsBody.collapsed{display:none}
   .run-when{font-weight:600;color:var(--ink);font-size:13.5px}
   .run-id{font-size:11px;color:var(--faint);margin-top:2px}
   .runs-table .small{font-size:12.5px;color:var(--muted)}
@@ -481,7 +481,7 @@
 
 <script>
 const STATE = {tasks:[], runs:[], providers:[], selectedRun:null, resultsCollapsed:false,
-  globalForm:null, activeCategory:null, selectedCatRun:null, catColors:{
+  globalForm:null, activeCategory:null, selectedCatRun:null, catResultsCollapsed:false, catColors:{
   extraction:'#5b7c99', code_generation:'#7d6794', computation:'#5f7e55',
   workflow:'#3f8079', agentic:'#a6793f', agentic_real:'#7a5223', debug:'#a85a4f'}};
 const CAT_DESC = {
@@ -1433,13 +1433,28 @@ function renderCategoryRuns(cat){
 }
 function highlightCatRow(id){
   document.querySelectorAll('#catRunsWrap .run-row').forEach(tr=>{
-    tr.classList.toggle('active', tr.dataset.catRunId===id);
+    const sel=tr.dataset.catRunId===id;
+    tr.classList.toggle('active', sel);
+    tr.classList.toggle('collapsed', sel && STATE.catResultsCollapsed);
+    if(sel) tr.setAttribute('aria-expanded', String(!STATE.catResultsCollapsed));
+    else tr.removeAttribute('aria-expanded');
   });
 }
+function applyCatResultsCollapse(){
+  $('#catResultsBody').classList.toggle('collapsed', STATE.catResultsCollapsed);
+  highlightCatRow(STATE.selectedCatRun);
+}
 async function selectCategoryRun(id){
+  if(STATE.selectedCatRun===id){
+    STATE.catResultsCollapsed=!STATE.catResultsCollapsed;
+    applyCatResultsCollapse();
+    return;
+  }
   STATE.selectedCatRun=id;
+  STATE.catResultsCollapsed=false;
   highlightCatRow(id);
   const body=$('#catResultsBody'); if(!body) return;
+  body.classList.remove('collapsed');
   body.innerHTML='<div class="empty">Loading…</div>';
   const rep=await fetchReport(id);
   if(rep) renderReport(rep, body, STATE.activeCategory);
