@@ -1169,8 +1169,8 @@ function scatterCard(taskScores){
 
     const rawMaxX=Math.max(...pts.map(t=>t[m.xk]));
     const rawMaxY=Math.max(...pts.map(t=>t[m.yk]));
-    const maxX=m.xmax??rawMaxX*1.08||1;
-    const maxY=m.ymax??rawMaxY*1.08||0.0001;
+    const maxX=(m.xmax??rawMaxX*1.08)||1;
+    const maxY=(m.ymax??rawMaxY*1.08)||0.0001;
     const scX=v=>P.l+(v/maxX)*iW;
     const scY=v=>P.t+iH-(v/maxY)*iH;
 
