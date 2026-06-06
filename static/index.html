@@ -330,30 +330,36 @@
   <div class="grid cols-4 metrics" id="overviewStats"></div>
 
   <div class="sec-head"><span class="eyebrow">Framework</span><h2>Task categories</h2></div>
-  <p class="lead">Every task belongs to one of five categories. The category determines what is tested and which scoring
-  method is applied. Counts are computed live from the loaded task set.</p>
+  <p class="lead">Every task belongs to one of five categories. The category determines what is tested; each task's
+  scoring method is then chosen to fit the shape of its correct answer (see below). Counts are computed live from the
+  loaded task set.</p>
   <div class="bento" id="catBento"></div>
 
   <div class="sec-head"><span class="eyebrow">Scoring</span><h2>Scoring methods</h2></div>
-  <p class="lead">Four scorers are fully deterministic; one uses a separate Claude call as judge. Every task is reduced
-  to a single normalized score in <code>[0, 1]</code>.</p>
+  <p class="lead">Four scorers are fully deterministic; one uses a separate Claude call as judge. Each task is assigned
+  the single method that fits the shape of its correct answer — an exact value, one number, a multi-field result,
+  runnable code, or an open-ended analysis — and is reduced to a normalized score in <code>[0, 1]</code>.</p>
   <div class="grid cols-2 methods">
-    <div class="card method-card"><h3>exact_json</h3><p>Parse the first JSON object/array in the response and compare
-      it to the expected output by deep equality. Score is <b>1.0</b> on an exact match, else <b>0.0</b>. Used for
-      extraction tasks with unambiguous expected outputs.</p></div>
-    <div class="card method-card"><h3>fuzzy_number</h3><p>Extract every number from the response; score <b>1.0</b> if
-      any one falls within tolerance (default <b>±2%</b>) of the expected value, else <b>0.0</b>. Tolerant of
-      formatting differences in single-number computations.</p></div>
-    <div class="card method-card"><h3>fuzzy_dict</h3><p>Parse a JSON dict and compare each key's value to the expected
-      within tolerance (default <b>±0.5%</b>). Score is the <b>fraction of keys matched</b> (0–1) — partial credit for
-      multi-field outputs such as margin-by-quarter.</p></div>
-    <div class="card method-card"><h3>functional</h3><p>Extract the <code>```python</code> block, append a hidden unit
-      test suite, and execute it in a sandboxed subprocess (30s timeout). Score is <b>1.0</b> only if the process exits
-      0 <i>and</i> prints <code>PASS</code>, else <b>0.0</b>. The most rigorous method.</p></div>
+    <div class="card method-card"><h3>exact_json</h3><p>Parses the first JSON object/array in the response and compares
+      it to the expected output by deep equality — <b>1.0</b> on an exact match, else <b>0.0</b>. <b>Why:</b> used when
+      the answer is a single discrete, unambiguous value or record (most extraction tasks); there is exactly one correct
+      output, so anything but an exact match is wrong.</p></div>
+    <div class="card method-card"><h3>fuzzy_number</h3><p>Extracts every number in the response and scores <b>1.0</b> if
+      any falls within tolerance (default <b>±2%</b>) of the expected value, else <b>0.0</b>. <b>Why:</b> used for
+      computations that yield one number (a ratio, WACC, an Altman Z-score); the tolerance forgives rounding and
+      formatting without rewarding a wrong figure.</p></div>
+    <div class="card method-card"><h3>fuzzy_dict</h3><p>Parses a JSON dict and compares each key's value within tolerance
+      (default <b>±0.5%</b>); the score is the <b>fraction of keys matched</b>. <b>Why:</b> used when the answer is
+      several related numbers (e.g. margin-by-quarter) — partial credit rewards getting most of a multi-field result
+      right.</p></div>
+    <div class="card method-card"><h3>functional</h3><p>Extracts the <code>```python</code> block, appends a hidden
+      unit-test suite, and runs it in a sandboxed subprocess (30s timeout) — <b>1.0</b> only if the process exits 0
+      <i>and</i> prints <code>PASS</code>, else <b>0.0</b>. <b>Why:</b> used for code_generation and debug, where the
+      deliverable is code; correctness is settled by executing it, not by matching text.</p></div>
     <div class="card method-card"><h3>llm_judge</h3><p>A separate Claude call (the <b>judge model</b>, deliberately
-      distinct from the runner to avoid self-grading) scores the response <b>0–4</b> against a per-task rubric with
-      forced-JSON output, normalized to 0–1 (<code>score / 4</code>). Used for agentic tasks where output format varies
-      and execution matters.</p></div>
+      distinct from the runner to avoid self-grading) scores the response <b>0–4</b> against a per-task rubric, normalized
+      to <code>score / 4</code>. <b>Why:</b> used for multi-step agentic tasks, whose output mixes code, execution and
+      prose with no single canonical answer — only a rubric can judge whether the analysis was done well.</p></div>
     <div class="card method-card feature"><h3>pass@0.75</h3>
       <div class="feature-num">≥ 0.75</div>
       <p>The headline rate. A task “passes” when its normalized score clears <b>0.75</b>. Reported overall and per
