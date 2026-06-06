@@ -365,7 +365,7 @@
   </div>
 
   <div class="sec-head"><h2>How a single task is run</h2></div>
-  <div class="grid cols-2" style="margin-top:28px">
+  <div style="margin-top:28px">
     <div class="card">
       <h3>The runner loop</h3>
       <p class="note" style="margin-top:8px">The agent receives the task prompt (plus any context data) and exactly one
@@ -374,18 +374,6 @@
       and output is captured as a full trajectory. <code>max_tokens</code> = 4096 per turn.</p>
       <p class="note">Runner model is configurable via <code>FINCODEBENCH_MODEL</code> (default
       <code>claude-haiku-4-5</code>).</p>
-    </div>
-    <div class="card">
-      <h3>The judge rubric (0–4)</h3>
-      <table style="margin-top:8px;font-size:13.5px">
-        <tr><td class="mono">4</td><td><b>Perfect</b> — correct, complete, well-structured</td></tr>
-        <tr><td class="mono">3</td><td><b>Good</b> — mostly correct, minor issues</td></tr>
-        <tr><td class="mono">2</td><td><b>Partial</b> — right direction, key errors</td></tr>
-        <tr><td class="mono">1</td><td><b>Poor</b> — attempts but substantially wrong</td></tr>
-        <tr><td class="mono">0</td><td><b>Fail</b> — wrong, crashed, or refused</td></tr>
-      </table>
-      <p class="note" style="margin-top:10px">Code that crashes or returns wrong output is capped at 1; a refusal scores 0.
-      The judge scores strictly against the rubric, not its own opinion.</p>
     </div>
   </div>
 </section>
