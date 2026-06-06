@@ -391,10 +391,9 @@
       distinct from the runner to avoid self-grading) scores the response <b>0–4</b> against a per-task rubric, normalized
       to <code>score / 4</code>. <b>Why:</b> used for workflow and agentic tasks, whose output mixes code, execution and
       prose with no single canonical answer — only a rubric can judge whether the analysis was done well.</p></div>
-    <div class="card method-card feature" data-method="pass@0.75"><h3>pass@0.75</h3>
-      <div class="feature-num">≥ 0.75</div>
-      <p>The headline rate. A task “passes” when its normalized score clears <b>0.75</b>. Reported overall and per
-      category alongside the mean score.</p></div>
+    <div class=”card method-card feature” data-method=”pass@0.75”><h3>pass@0.75</h3>
+      <div class=”feature-num”>≥ 0.75</div>
+      <p>The headline rate. Every task is reduced to a normalized score in <b>[0, 1]</b>. If that score hits <b>0.75 or above</b>, the task counts as passed. <code>pass@0.75</code> is simply the share of tasks that passed — so a result of <b>46%</b> means the model cleared the bar on 46% of tasks and fell short on the other 54%. Reported overall and per category alongside the mean score.</p></div>
   </div>
 
   <div class="sec-head"><h2>How a single task is run</h2></div>
