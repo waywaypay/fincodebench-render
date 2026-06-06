@@ -160,6 +160,30 @@ def test_legacy_anthropic_header_still_works(client):
     assert r.json()["provider"] == "anthropic"
 
 
+def test_category_scoped_run_reports_only_that_category(client):
+    # The per-category dashboard page triggers runs as {"categories": [cat]} and
+    # then filters the runs list by each entry's `categories`. Lock both halves of
+    # that contract: the scope must round-trip into the dashboard payload, and the
+    # report must cover only the requested category.
+    r = client.post(
+        "/runs",
+        headers={"X-Provider-Api-Key": "sk-test"},
+        json={"provider": "openai", "categories": ["computation"]},
+    )
+    assert r.status_code == 202, r.text
+    run_id = r.json()["run_id"]
+
+    data = client.get("/dashboard/data").json()
+    entry = next(x for x in data["runs"] if x["run_id"] == run_id)
+    assert entry["categories"] == ["computation"]  # what the category page filters on
+
+    g = client.get(f"/runs/{run_id}").json()
+    assert g["status"] == "completed"
+    report = g["report"]
+    assert {t["category"] for t in report["task_scores"]} == {"computation"}
+    assert set(report["by_category"]) == {"computation"}
+
+
 def test_module_globals_restored_after_run(client):
     import runner
     import judge
