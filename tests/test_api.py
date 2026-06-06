@@ -134,6 +134,38 @@ def test_full_run_with_model_override(client):
     assert any(b["type"] == "tool_result" for b in blocks)
 
 
+def test_run_label_round_trips(client):
+    """An optional label delineates a run and survives through to the listing."""
+    r = client.post(
+        "/runs",
+        headers={"X-Provider-Api-Key": "sk-test"},
+        json={"provider": "openai", "task_ids": ["codegen-001"], "label": "  baseline  "},
+    )
+    assert r.status_code == 202, r.text
+    run_id = r.json()["run_id"]
+
+    # Stored on the run, trimmed of surrounding whitespace.
+    g = client.get(f"/runs/{run_id}").json()
+    assert g["label"] == "baseline"
+
+    # And visible in the runs listing so runs can be told apart.
+    listing = client.get("/runs").json()["runs"]
+    entry = next(x for x in listing if x["run_id"] == run_id)
+    assert entry["label"] == "baseline"
+
+
+def test_run_without_label_is_none(client):
+    """Omitting the label (or sending only whitespace) leaves it null."""
+    r = client.post(
+        "/runs",
+        headers={"X-Provider-Api-Key": "sk-test"},
+        json={"provider": "openai", "task_ids": ["codegen-001"], "label": "   "},
+    )
+    assert r.status_code == 202, r.text
+    run_id = r.json()["run_id"]
+    assert client.get(f"/runs/{run_id}").json()["label"] is None
+
+
 def test_llm_judge_run_scores(client):
     r = client.post(
         "/runs",

@@ -313,6 +313,9 @@
   #resultsBody.collapsed,#catResultsBody.collapsed{display:none}
   .run-when{font-weight:600;color:var(--ink);font-size:13.5px}
   .run-id{font-size:11px;color:var(--faint);margin-top:2px}
+  .run-label{display:inline-block;margin-top:4px;padding:1px 7px;font-size:11px;font-weight:600;
+    color:var(--ink);background:var(--chip,#eef0f4);border:1px solid var(--line,#e2e5ea);border-radius:999px;
+    max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom}
   .runs-table .small{font-size:12.5px;color:var(--muted)}
   .badge.st-completed{background:#e9efe6;color:#4d6346;border-color:#dae2d4}
   .badge.st-running{background:#f4ecdd;color:#7b5d36;border-color:#eaddc7}
@@ -465,6 +468,7 @@
       <input id="runTask" placeholder="…or a single task id e.g. codegen-001" style="flex:1">
       <input id="runModel" list="modelList" placeholder="Model (provider default)">
       <datalist id="modelList"></datalist>
+      <input id="runLabel" placeholder="Label (optional, e.g. baseline)" title="A free-text tag to delineate this run in the table">
       <input id="runKey" type="password" placeholder="Your API key">
       <button class="btn ghost" id="loadModelsBtn" type="button" title="Fetch this provider's full model list using your key">↻ Models</button>
       <button class="btn" id="runBtn">Run</button>
@@ -691,6 +695,7 @@ async function submitRun(f){
   }
   if(prov) payload.provider=prov.name;
   if(model) payload.model=model;
+  const label=f.label?f.label.value.trim():''; if(label) payload.label=label;
   btn.disabled=true; st.textContent='Submitting…';
   try{
     const headers={'Content-Type':'application/json','X-Provider-Api-Key':key};
@@ -707,7 +712,7 @@ async function submitRun(f){
 function setupGlobalForm(){
   const f={
     provider:$('#runProvider'), scope:$('#runScope'), task:$('#runTask'),
-    model:$('#runModel'), modelList:$('#modelList'), key:$('#runKey'),
+    model:$('#runModel'), modelList:$('#modelList'), key:$('#runKey'), label:$('#runLabel'),
     loadBtn:$('#loadModelsBtn'), runBtn:$('#runBtn'), note:$('#modelNote'),
     status:$('#runStatus'), docs:$('#provDocs'), lockedCategory:null, onCompleted:null,
   };
@@ -732,6 +737,7 @@ function buildTriggerForm({lockedCategory=null,onCompleted=null}={}){
        <select class="runProvider" title="Model provider"></select>
        <input class="runModel" placeholder="Model (provider default)" style="flex:1">
        <datalist></datalist>
+       <input class="runLabel" placeholder="Label (optional, e.g. baseline)" title="A free-text tag to delineate this run in the table">
        <input class="runKey" type="password" placeholder="Your API key">
        <button class="btn ghost loadModelsBtn" type="button" title="Fetch this provider's full model list using your key">↻ Models</button>
        <button class="btn runBtn">Run</button>
@@ -742,7 +748,7 @@ function buildTriggerForm({lockedCategory=null,onCompleted=null}={}){
   const model=root.querySelector('.runModel'); model.setAttribute('list',dl.id);
   const f={
     root, provider:root.querySelector('.runProvider'), scope:null, task:null,
-    model, modelList:dl, key:root.querySelector('.runKey'),
+    model, modelList:dl, key:root.querySelector('.runKey'), label:root.querySelector('.runLabel'),
     loadBtn:root.querySelector('.loadModelsBtn'), runBtn:root.querySelector('.runBtn'),
     note:root.querySelector('.modelNote'), status:root.querySelector('.runStatus'),
     docs:root.querySelector('.provDocs'), lockedCategory, onCompleted,
@@ -916,8 +922,9 @@ function setRuns(serverRuns){
 // one. `datasetKey` ('runId' | 'catRunId') sets which data-* attr carries the run
 // id so each table's highlight logic stays scoped to its own rows.
 function runRowInner(r){
+  const label=r.label?`<div class="run-label" title="Run label">${esc(r.label)}</div>`:'';
   return `<td><div class="run-when">${esc(fmtWhen(r.created_at))}</div>
-           <div class="run-id mono">${esc(r.run_id.slice(0,15))}</div></td>
+           <div class="run-id mono">${esc(r.run_id.slice(0,15))}</div>${label}</td>
        <td class="mono small">${esc(r.model||'—')}</td>
        <td>${statusBadge(r)}${r.recovered?' <span class="muted" style="font-size:11px;white-space:nowrap" title="Reconstructed from run files on disk — was missing from the registry">↻ recovered</span>':''}${r._local?' <span class="muted" style="font-size:11px;white-space:nowrap" title="Saved in this browser — the server no longer has this run (likely ephemeral storage). Attach a persistent disk at /data for shared, server-side history.">💾 local</span>':''}</td>
        <td>${r.n_tasks??'—'}</td>

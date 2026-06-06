@@ -262,6 +262,13 @@ curl -X POST <url>/runs \
   -H 'X-Provider-Api-Key: <your-key>' \
   -d '{"provider":"deepseek","model":"deepseek-chat","categories":["computation"]}'
 
+# Optionally tag a run with a label to tell it apart from others (e.g. compare
+# providers, or re-runs on different dates). The label shows in the runs table.
+curl -X POST <url>/runs \
+  -H 'Content-Type: application/json' \
+  -H 'X-Provider-Api-Key: <your-key>' \
+  -d '{"provider":"kimi","label":"kimi-vs-opus","categories":["computation"]}'
+
 # Discover supported providers, key hints, and default models
 curl <url>/providers
 ```
