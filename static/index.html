@@ -317,25 +317,23 @@
 <!-- ───────── METHODOLOGY ───────── -->
 <section id="overview" class="view active">
   <div class="hero">
-    <span class="eyebrow">Financial coding-agent evaluation</span>
     <h1>A coding-agent eval suite for financial data tasks</h1>
     <p class="lead">FinCodeBench measures how well a coding agent does the core work of financial professionals:
     pulling structured data out of financial tables, filings, press releases, transcripts, and presentations; writing
     correct financial code from scratch; working through multi-step problems agentically — writing code, running it,
     reading the output, and refining until the numbers come out right; and fixing bugs in broken financial models like
-    valuation, forecasting, and ratio code. It is the domain where model errors are most costly: an off-by-one in a DCF
-    model or a hallucinated revenue figure is a wrong investment decision, not an inconvenience.</p>
+    valuation, forecasting, and ratio code.</p>
   </div>
 
   <div class="grid cols-4 metrics" id="overviewStats"></div>
 
-  <div class="sec-head"><span class="eyebrow">Framework</span><h2>Task categories</h2></div>
+  <div class="sec-head"><h2>Task categories</h2></div>
   <p class="lead">Every task belongs to one of five categories. The category determines what is tested; each task's
   scoring method is then chosen to fit the shape of its correct answer (see below). Counts are computed live from the
   loaded task set.</p>
   <div class="bento" id="catBento"></div>
 
-  <div class="sec-head"><span class="eyebrow">Scoring</span><h2>Scoring methods</h2></div>
+  <div class="sec-head"><h2>Scoring methods</h2></div>
   <p class="lead">Four scorers are fully deterministic; one uses a separate Claude call as judge. Each task is assigned
   the single method that fits the shape of its correct answer — an exact value, one number, a multi-field result,
   runnable code, or an open-ended analysis — and is reduced to a normalized score in <code>[0, 1]</code>.</p>
@@ -366,7 +364,7 @@
       category alongside the mean score.</p></div>
   </div>
 
-  <div class="sec-head"><span class="eyebrow">Execution</span><h2>How a single task is run</h2></div>
+  <div class="sec-head"><h2>How a single task is run</h2></div>
   <div class="grid cols-2" style="margin-top:28px">
     <div class="card">
       <h3>The runner loop</h3>
