@@ -441,7 +441,7 @@
   <h1>Results</h1>
   <div class="runbar">
     <label>All runs</label>
-    <button class="btn ghost" id="refreshRuns">Refresh</button>
+    <button class="btn ghost" id="triggerRunBtn">Trigger a new run</button>
   </div>
   <p class="note" style="margin:0 0 4px">Each run shows its model, cost, and latency. Click a completed run to drill into its per-task results. Completed runs are also cached in this browser (<span class="muted">💾 local</span>), so they stay visible even if the server is restarted.</p>
   <div id="runsTableWrap"></div>
@@ -999,8 +999,8 @@ function highlightRow(id){
     else tr.removeAttribute('aria-expanded');
   });
 }
-$('#refreshRuns').onclick=async()=>{
-  const d=await (await fetch('dashboard/data')).json(); setRuns(d.runs); renderRunsTable();
+$('#triggerRunBtn').onclick=()=>{
+  const d=document.querySelector('.card.trigger'); d.open=true; d.scrollIntoView({behavior:'smooth'});
 };
 // Fetch a run's full report from the server, falling back to the browser cache
 // (the server may have forgotten it on ephemeral storage). Returns it, or null.
