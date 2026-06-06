@@ -114,6 +114,12 @@
     text-transform:uppercase;color:var(--faint)}
   .bento-desc{color:var(--muted);font-size:14px;line-height:1.6;margin:14px 0 0;flex:1}
   .bento-methods{display:flex;flex-wrap:wrap;gap:6px;margin-top:18px}
+  /* clickable category cards → per-category BYOK page */
+  .bento-card.clickable{cursor:pointer}
+  .bento-card:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+  .bento-cta{margin-top:16px;font:600 12px/1 var(--sans);letter-spacing:.04em;color:var(--muted);
+    display:inline-flex;align-items:center;gap:6px;transition:color .18s ease,gap .18s ease}
+  .bento-card.clickable:hover .bento-cta{color:var(--ink);gap:10px}
   @media(max-width:900px){.bento{grid-template-columns:1fr}.bento-card{grid-column:auto!important;min-height:0}}
 
   /* ── badges ─────────────────────────────────────────── */
@@ -157,6 +163,19 @@
   .method-card.feature p{color:#a9a69b}
   .method-card.feature .feature-num{font-family:var(--display);font-weight:600;font-size:46px;
     letter-spacing:-.03em;line-height:1;color:#f8f7f2;margin:14px 0 2px}
+  /* clickable scoring-method cards → detail modal */
+  .method-card.clickable{cursor:pointer}
+  .method-card:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+  .method-card .method-more{display:inline-block;margin-top:14px;font:600 12px/1 var(--sans);
+    letter-spacing:.03em;color:var(--muted);transition:color .15s ease}
+  .method-card.clickable:hover .method-more{color:var(--ink)}
+  .method-card.feature .method-more{color:#9b988d}
+  .method-card.feature.clickable:hover .method-more{color:#f8f7f2}
+  /* numbered steps inside the method-detail modal */
+  .method-steps{margin:0;padding-left:20px}
+  .method-steps li{margin:0 0 9px;font-size:13.5px;line-height:1.62;color:var(--text)}
+  .method-steps li:last-child{margin-bottom:0}
+  .modal .prose code{background:var(--card)}
 
   /* rubric table */
   table{width:100%;border-collapse:collapse;font-size:14px;font-variant-numeric:tabular-nums}
@@ -340,27 +359,27 @@
   the single method that fits the shape of its correct answer — an exact value, one number, a multi-field result,
   runnable code, or an open-ended analysis — and is reduced to a normalized score in <code>[0, 1]</code>.</p>
   <div class="grid cols-2 methods">
-    <div class="card method-card"><h3>exact_json</h3><p>Parses the first JSON object/array in the response and compares
+    <div class="card method-card" data-method="exact_json"><h3>exact_json</h3><p>Parses the first JSON object/array in the response and compares
       it to the expected output by deep equality — <b>1.0</b> on an exact match, else <b>0.0</b>. <b>Why:</b> used when
       the answer is a single discrete, unambiguous value or record (most extraction tasks); there is exactly one correct
       output, so anything but an exact match is wrong.</p></div>
-    <div class="card method-card"><h3>fuzzy_number</h3><p>Extracts every number in the response and scores <b>1.0</b> if
+    <div class="card method-card" data-method="fuzzy_number"><h3>fuzzy_number</h3><p>Extracts every number in the response and scores <b>1.0</b> if
       any falls within tolerance (default <b>±2%</b>) of the expected value, else <b>0.0</b>. <b>Why:</b> used for
       computations that yield one number (a ratio, WACC, an Altman Z-score); the tolerance forgives rounding and
       formatting without rewarding a wrong figure.</p></div>
-    <div class="card method-card"><h3>fuzzy_dict</h3><p>Parses a JSON dict and compares each key's value within tolerance
+    <div class="card method-card" data-method="fuzzy_dict"><h3>fuzzy_dict</h3><p>Parses a JSON dict and compares each key's value within tolerance
       (default <b>±0.5%</b>); the score is the <b>fraction of keys matched</b>. <b>Why:</b> used when the answer is
       several related numbers (e.g. margin-by-quarter) — partial credit rewards getting most of a multi-field result
       right.</p></div>
-    <div class="card method-card"><h3>functional</h3><p>Extracts the <code>```python</code> block, appends a hidden
+    <div class="card method-card" data-method="functional"><h3>functional</h3><p>Extracts the <code>```python</code> block, appends a hidden
       unit-test suite, and runs it in a sandboxed subprocess (30s timeout) — <b>1.0</b> only if the process exits 0
       <i>and</i> prints <code>PASS</code>, else <b>0.0</b>. <b>Why:</b> used for code_generation and debug, where the
       deliverable is code; correctness is settled by executing it, not by matching text.</p></div>
-    <div class="card method-card"><h3>llm_judge</h3><p>A separate Claude call (the <b>judge model</b>, deliberately
+    <div class="card method-card" data-method="llm_judge"><h3>llm_judge</h3><p>A separate Claude call (the <b>judge model</b>, deliberately
       distinct from the runner to avoid self-grading) scores the response <b>0–4</b> against a per-task rubric, normalized
       to <code>score / 4</code>. <b>Why:</b> used for workflow and agentic tasks, whose output mixes code, execution and
       prose with no single canonical answer — only a rubric can judge whether the analysis was done well.</p></div>
-    <div class="card method-card feature"><h3>pass@0.75</h3>
+    <div class="card method-card feature" data-method="pass@0.75"><h3>pass@0.75</h3>
       <div class="feature-num">≥ 0.75</div>
       <p>The headline rate. A task “passes” when its normalized score clears <b>0.75</b>. Reported overall and per
       category alongside the mean score.</p></div>
@@ -438,6 +457,9 @@
   </details>
 </section>
 
+<!-- ───────── CATEGORY (per-category BYOK page, populated by renderCategory) ───────── -->
+<section id="category" class="view"></section>
+
 </main>
 <footer><div class="wrap">
   <span class="eyebrow">FinCodeBench</span>
@@ -445,7 +467,8 @@
 </div></footer>
 
 <script>
-const STATE = {tasks:[], runs:[], providers:[], selectedRun:null, resultsCollapsed:false, catColors:{
+const STATE = {tasks:[], runs:[], providers:[], selectedRun:null, resultsCollapsed:false,
+  globalForm:null, activeCategory:null, selectedCatRun:null, catColors:{
   extraction:'#5b7c99', code_generation:'#7d6794', computation:'#5f7e55',
   workflow:'#3f8079', agentic:'#a6793f', debug:'#a85a4f'}};
 const CAT_DESC = {
@@ -455,6 +478,88 @@ const CAT_DESC = {
   workflow:'Fixed, pre-specified pipeline run through the tool loop — the steps are given; the agent executes and self-corrects.',
   agentic:'Open-ended: discover data across multiple tools, decide an approach, reconcile messy inputs, then conclude.',
   debug:'Find and fix bugs in broken financial code.'};
+// Long-form explanation of each scoring method, surfaced when a method card is
+// clicked. Kept faithful to the harness (scorer.py / judge.py / eval.py).
+const METHOD_DETAIL = {
+  exact_json:{tag:'deterministic',
+    summary:'Deep-equality match of the JSON you return against one canonical answer — all-or-nothing.',
+    how:[
+      'Locate the answer: scan the response for the first <code>```json</code> fence, then any <code>```</code> fence, then the first bare <code>{…}</code> object or <code>[…]</code> array, and <code>json.loads</code> it.',
+      'Compare the parsed value to the task’s <code>expected_output</code> with Python <code>==</code> — recursive deep equality over nested dicts, lists, and scalars.',
+      'Score <b>1.0</b> on an exact match, <b>0.0</b> otherwise. If nothing parseable is found the score is <b>0.0</b> (“no JSON found”).',
+    ],
+    defaultsLabel:'Matching rules',
+    defaults:'No numeric tolerance — the value must match exactly. Dict key order is ignored (dict equality); list element order is significant.',
+    why:'Used when the answer is a single discrete, unambiguous value or record (most extraction tasks). There is exactly one correct output, so anything but an exact match is wrong.',
+    example:{label:'Example',
+      response:'```json\n{"ticker":"AAPL","fy":2023,"revenue":383285}\n```',
+      note:'With <code>expected_output</code> equal to that object → <b>1.0</b>. Any differing or missing field → <b>0.0</b>.'}},
+  fuzzy_number:{tag:'deterministic',
+    summary:'Pulls every number out of the response and passes if any one lands within tolerance of the expected value.',
+    how:[
+      'Strip thousands separators, then regex-extract <i>all</i> integers/decimals (scientific notation included) anywhere in the response.',
+      'Compare each extracted number to the expected value using a relative tolerance (absolute when the expected value is 0).',
+      'Score <b>1.0</b> as soon as one number is within tolerance, else <b>0.0</b>.',
+    ],
+    defaultsLabel:'Tolerance',
+    defaults:'Default <b>±2%</b> (<code>tolerance: 0.02</code>), overridable per task. Relative to the expected value, so it forgives rounding and units without rewarding a wrong figure.',
+    why:'Used for computations that yield one number — a ratio, WACC, an Altman Z-Score. Scanning every number means a correct figure still counts even when wrapped in explanatory prose.',
+    example:{label:'Example',
+      response:'The WACC works out to about 8.6%.',
+      note:'expected = <code>8.74</code>, tolerance ±2% → |8.6−8.74|/8.74 ≈ 1.6% ≤ 2% → <b>1.0</b>.'}},
+  fuzzy_dict:{tag:'deterministic',
+    summary:'Per-key numeric comparison of a returned dict — partial credit for a multi-field answer.',
+    how:[
+      'Parse the first JSON object in the response (must be a dict).',
+      'For each key in <code>expected_output</code>: numbers match within tolerance; <code>null</code> matches only <code>null</code>; other values match by equality.',
+      'Score = <b>fraction of keys matched</b> (matched ÷ total). A missing or unparseable dict scores <b>0.0</b>.',
+    ],
+    defaultsLabel:'Tolerance',
+    defaults:'Default <b>±0.5%</b> (<code>tolerance: 0.005</code>) per numeric key, overridable per task.',
+    why:'Used when the answer is several related numbers (e.g. margin-by-quarter). Partial credit rewards getting most of a multi-field result right instead of zeroing the whole task for one slip.',
+    example:{label:'Example',
+      response:'```json\n{"q1":0.42,"q2":0.45,"q3":0.99}\n```',
+      note:'expected = <code>{"q1":0.42,"q2":0.45,"q3":0.47}</code> → 2 of 3 keys within ±0.5% → score <b>0.67</b>.'}},
+  functional:{tag:'deterministic',
+    summary:'Executes the code you wrote against a hidden test suite — correctness is settled by running it.',
+    how:[
+      'Extract the <code>```python</code> block (falling back to any <code>```</code> block, then the raw response).',
+      'Append a hidden unit-test suite and write the combined program to a temp file.',
+      'Run it in a sandboxed <code>python3</code> subprocess with a <b>30s timeout</b>.',
+      'Score <b>1.0</b> only if the process exits <code>0</code> <i>and</i> prints <code>PASS</code>; otherwise <b>0.0</b> (the last stderr/timeout is recorded). Each candidate code block is tried until one passes.',
+    ],
+    defaultsLabel:'Sandbox',
+    defaults:'Isolated subprocess, 30-second wall-clock limit. The test suite is never shown to the agent; it only sees the prompt.',
+    why:'Used for code_generation and debug, where the deliverable is code. Correctness is decided by execution against tests, not by matching text.',
+    example:{label:'Pass condition',
+      response:'returncode == 0  AND  "PASS" in stdout',
+      note:'A crash, a wrong result the tests reject, or exceeding 30s all yield <b>0.0</b>.'}},
+  llm_judge:{tag:'model-graded',
+    summary:'A separate judge model scores the full transcript 0–4 against a per-task rubric, normalized to 0–1.',
+    how:[
+      'Rebuild a labeled transcript from the run’s trajectory — the assistant’s text, the code it executed, and each execution’s output — not just the final message, so the judge grades the work, not only the conclusion.',
+      'Send the task prompt, its context, the rubric, and that transcript to the <b>judge model</b> — deliberately a different model from the runner to avoid self-grading.',
+      'The judge returns strict JSON <code>{"score":0–4,"reasoning","key_issues"}</code>; the score is clamped to 0–4 and normalized to <code>score / 4</code>.',
+    ],
+    defaultsLabel:'Rubric & guardrails',
+    defaults:'0–4 scale (4 = perfect → 0 = fail). House rules: code that crashes or returns wrong output is capped at 1; a refusal scores 0. Transcript capped at ~8000 chars; judge cost is tracked into the run total.',
+    why:'Used for multi-step workflow and agentic tasks, whose output mixes code, execution, and prose with no single canonical answer. Only a rubric can judge whether the analysis was actually done well.',
+    example:{label:'Normalization',
+      response:'judge score 3 / 4  →  normalized 0.75',
+      note:'A 3/4 maps to 0.75 — exactly the pass mark, so a “good” judged answer just clears pass@0.75.'}},
+  'pass@0.75':{tag:'headline metric',
+    summary:'Not a scorer but the headline rate: the share of tasks whose normalized score clears 0.75.',
+    how:[
+      'Every task is reduced to a normalized score in <code>[0, 1]</code> by its own scorer.',
+      'A task <b>passes</b> when that score is <b>≥ 0.75</b>.',
+      'pass@0.75 = passes ÷ tasks, reported <b>overall</b> and <b>per category</b> alongside the mean score.',
+    ],
+    defaultsLabel:'What 0.75 means per scorer',
+    defaults:'Binary scorers (<code>exact_json</code>, <code>functional</code>): pass = fully correct. <code>fuzzy_dict</code>: ≥ 75% of keys matched. <code>llm_judge</code>: ≥ 3 of 4 on the rubric.',
+    why:'A single, comparable bar across every scoring method — “did the agent get it right enough to be useful?” — that holds whether the underlying score was binary, fractional, or rubric-based.',
+    example:{label:'Example',
+      response:'24 of 33 tasks scored ≥ 0.75',
+      note:'pass@0.75 = 24 / 33 ≈ <b>73%</b>, independent of the mean score.'}}};
 const $ = s => document.querySelector(s);
 const el = (t,c,h)=>{const e=document.createElement(t);if(c)e.className=c;if(h!=null)e.innerHTML=h;return e;};
 const esc = s => (s==null?'':String(s)).replace(/[&<>]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[m]));
@@ -474,66 +579,74 @@ const fmtWhen = iso => {
   return d.toLocaleString(undefined,{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
 };
 
-// nav
-document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
-  document.querySelectorAll('nav button').forEach(x=>x.classList.remove('active'));
-  document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));
-  b.classList.add('active'); $('#'+b.dataset.view).classList.add('active');
+// nav — top-level views plus the per-category drill-in (#category, which has no
+// nav button of its own, so all nav buttons go inactive while it's shown).
+function navTo(view){
+  document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('active', x.dataset.view===view));
+  document.querySelectorAll('.view').forEach(x=>x.classList.toggle('active', x.id===view));
   window.scrollTo({top:0,behavior:'smooth'});
-});
+}
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{ STATE.activeCategory=null; navTo(b.dataset.view); });
 
 async function init(){
   try{
     const d = await (await fetch('dashboard/data')).json();
     STATE.tasks = d.tasks||[]; STATE.providers = d.providers||[]; setRuns(d.runs);
-    renderOverview(); renderTasks(); renderProviders(); renderRunsTable();
+    setupGlobalForm();
+    renderOverview(); renderTasks(); renderRunsTable(); wireMethodCards();
   }catch(e){ $('#resultsBody').innerHTML='<div class="empty">Failed to load data: '+esc(e.message)+'</div>'; }
 }
 
-// ---------- providers (bring-your-own-key selector) ----------
-function renderProviders(){
-  const sel=$('#runProvider'); if(!sel) return;
+// ---------- bring-your-own-key trigger form (reusable) ----------
+// One set of provider/model wiring drives two instances of the form: the global
+// "Trigger a new run" form in Results, and the per-category form on a category
+// page. Each instance is a context object `f` of element refs plus `lockedCategory`
+// (null = global, with scope + single-task inputs) and an optional
+// `onCompleted(run_id)` callback. Everything below operates on `f`, never on fixed
+// IDs, so the two forms stay independent.
+function currentProvider(f){
+  const name=f.provider.value;
+  return STATE.providers.find(p=>p.name===name)||STATE.providers[0];
+}
+function fillModels(f,list){
+  f.modelList.innerHTML='';
+  (list||[]).forEach(m=>{const o=el('option');o.value=m;f.modelList.append(o);});
+}
+function applyProvider(f){
+  const p=currentProvider(f); if(!p) return;
+  f.key.placeholder=`Your ${p.label} API key (${p.key_hint||'…'})`;
+  f.model.placeholder=`Model (default ${p.default_model||'—'})`;
+  f.model.value='';
+  f.note.textContent='';
+  fillModels(f,p.models);  // static suggestions until the live list loads
+  if(f.docs){ f.docs.href=p.docs||'#'; f.docs.style.display=p.docs?'':'none'; }
+  loadModels(f);  // populate the full live/public list (or static) for this provider
+}
+function renderProviders(f){
+  const sel=f.provider; if(!sel) return;
   if(!STATE.providers.length){
     // Fallback so the form still works if the providers payload is unavailable.
     STATE.providers=[{name:'anthropic',label:'Anthropic',key_hint:'sk-ant-…',default_model:'',models:[],docs:''}];
   }
   sel.innerHTML='';
   STATE.providers.forEach(p=>{const o=el('option');o.value=p.name;o.textContent=p.label;sel.append(o);});
-  sel.onchange=applyProvider;
-  applyProvider();
-}
-function currentProvider(){
-  const name=$('#runProvider').value;
-  return STATE.providers.find(p=>p.name===name)||STATE.providers[0];
-}
-function fillModels(list){
-  const dl=$('#modelList'); dl.innerHTML='';
-  (list||[]).forEach(m=>{const o=el('option');o.value=m;dl.append(o);});
-}
-function applyProvider(){
-  const p=currentProvider(); if(!p) return;
-  $('#runKey').placeholder=`Your ${p.label} API key (${p.key_hint||'…'})`;
-  $('#runModel').placeholder=`Model (default ${p.default_model||'—'})`;
-  $('#runModel').value='';
-  $('#modelNote').textContent='';
-  fillModels(p.models);  // static suggestions until the live list loads
-  const docs=$('#provDocs'); if(docs){ docs.href=p.docs||'#'; docs.style.display=p.docs?'':'none'; }
-  loadModels();  // populate the full live/public list (or static) for this provider
+  sel.onchange=()=>applyProvider(f);
+  applyProvider(f);
 }
 // Fetch the provider's full model catalogue. Sends the key when present (full
 // live list); without a key the server returns the public list (OpenRouter) or
 // the static suggestions.
-async function loadModels(){
-  const p=currentProvider(), key=$('#runKey').value.trim(), note=$('#modelNote');
+async function loadModels(f){
+  const p=currentProvider(f), key=f.key.value.trim(), note=f.note;
   if(!p) return;
   note.textContent='Loading models…';
   try{
     const headers=key?{'X-Provider-Api-Key':key}:{};
     const res=await fetch('providers/'+encodeURIComponent(p.name)+'/models',{headers});
-    if(!res.ok){ fillModels(p.models); note.textContent='Couldn’t load models ('+res.status+') — showing defaults.'; return; }
+    if(!res.ok){ fillModels(f,p.models); note.textContent='Couldn’t load models ('+res.status+') — showing defaults.'; return; }
     const d=await res.json();
     const list=(d.models&&d.models.length)?d.models:p.models;
-    fillModels(list);
+    fillModels(f,list);
     if(d.source==='live'){
       note.textContent=`${list.length} ${p.label} models — type to filter.`;
     }else if(key){
@@ -541,7 +654,85 @@ async function loadModels(){
     }else{
       note.textContent=`${list.length} common models — add your API key for ${p.label}’s full list.`;
     }
-  }catch(e){ fillModels(p.models); note.textContent='Couldn’t load models — showing defaults.'; }
+  }catch(e){ fillModels(f,p.models); note.textContent='Couldn’t load models — showing defaults.'; }
+}
+
+// Submit a run for either form. Global form honors its scope + single-task
+// inputs; a category form is always scoped to f.lockedCategory.
+async function submitRun(f){
+  const prov=currentProvider(f);
+  const model=f.model.value.trim(), key=f.key.value.trim();
+  const st=f.status, btn=f.runBtn;
+  if(!key){ st.textContent=`Enter your ${prov?prov.label:''} API key — each run uses your own key.`; return; }
+  let payload;
+  if(f.lockedCategory){
+    payload={categories:[f.lockedCategory]};
+  }else{
+    const scope=f.scope.value, taskId=f.task.value.trim();
+    payload = taskId ? {task_ids:[taskId]} : (scope==='all'?{}:{categories:[scope]});
+  }
+  if(prov) payload.provider=prov.name;
+  if(model) payload.model=model;
+  btn.disabled=true; st.textContent='Submitting…';
+  try{
+    const headers={'Content-Type':'application/json','X-Provider-Api-Key':key};
+    const res=await fetch('runs',{method:'POST',headers,body:JSON.stringify(payload)});
+    if(!res.ok){st.textContent='Error '+res.status+': '+esc(await res.text());btn.disabled=false;return;}
+    const {run_id}=await res.json();
+    st.textContent='Queued '+run_id+' — polling…';
+    poll(run_id,st,btn,f.onCompleted);
+  }catch(e){ st.textContent='Failed: '+esc(e.message); btn.disabled=false; }
+}
+
+// Wire the existing global form (markup lives in the Results section) with the
+// shared handlers.
+function setupGlobalForm(){
+  const f={
+    provider:$('#runProvider'), scope:$('#runScope'), task:$('#runTask'),
+    model:$('#runModel'), modelList:$('#modelList'), key:$('#runKey'),
+    loadBtn:$('#loadModelsBtn'), runBtn:$('#runBtn'), note:$('#modelNote'),
+    status:$('#runStatus'), docs:$('#provDocs'), lockedCategory:null, onCompleted:null,
+  };
+  STATE.globalForm=f;
+  renderProviders(f);
+  f.runBtn.onclick=()=>submitRun(f);
+  f.loadBtn.onclick=()=>loadModels(f);
+  let t; f.key.addEventListener('input',()=>{clearTimeout(t);t=setTimeout(()=>loadModels(f),600);});
+}
+
+// Build a fresh trigger form for a category page (locked to one category, so no
+// scope/task inputs). Returns its context object; the caller mounts f.root and
+// calls renderProviders(f).
+function buildTriggerForm({lockedCategory=null,onCompleted=null}={}){
+  const root=el('div');
+  root.innerHTML=
+    `<p class="note" style="margin-top:0"><strong>Bring your own key:</strong> pick a provider and paste
+       <em>your</em> API key — the run uses your key and is billed to your account. It is sent only with this
+       request, never stored on the server, and kept only in this browser tab.
+       <a class="provDocs" href="#" target="_blank" rel="noopener">Get a key ↗</a></p>
+     <div class="filters" style="margin-top:12px">
+       <select class="runProvider" title="Model provider"></select>
+       <input class="runModel" placeholder="Model (provider default)" style="flex:1">
+       <datalist></datalist>
+       <input class="runKey" type="password" placeholder="Your API key">
+       <button class="btn ghost loadModelsBtn" type="button" title="Fetch this provider's full model list using your key">↻ Models</button>
+       <button class="btn runBtn">Run</button>
+     </div>
+     <div class="note modelNote" style="margin-top:8px"></div>
+     <div class="note runStatus"></div>`;
+  const dl=root.querySelector('datalist'); dl.id='ml_'+Math.random().toString(36).slice(2,9);
+  const model=root.querySelector('.runModel'); model.setAttribute('list',dl.id);
+  const f={
+    root, provider:root.querySelector('.runProvider'), scope:null, task:null,
+    model, modelList:dl, key:root.querySelector('.runKey'),
+    loadBtn:root.querySelector('.loadModelsBtn'), runBtn:root.querySelector('.runBtn'),
+    note:root.querySelector('.modelNote'), status:root.querySelector('.runStatus'),
+    docs:root.querySelector('.provDocs'), lockedCategory, onCompleted,
+  };
+  f.runBtn.onclick=()=>submitRun(f);
+  f.loadBtn.onclick=()=>loadModels(f);
+  let t; f.key.addEventListener('input',()=>{clearTimeout(t);t=setTimeout(()=>loadModels(f),600);});
+  return f;
 }
 
 // ---------- methodology ----------
@@ -565,15 +756,20 @@ function renderOverview(){
   const shown=order.filter(c=>cats[c]);
   const spanFor=i=> shown.length===5 ? [2,2,2,3,3][i] : 2;
   shown.forEach((c,i)=>{
-    const card=el('div','bento-card');
+    const card=el('div','bento-card clickable');
     card.style.gridColumn='span '+spanFor(i);
+    card.tabIndex=0; card.setAttribute('role','button');
+    card.setAttribute('aria-label',`${c} — open to run this category`);
     const methods=[...cats[c].methods].map(m=>`<span class="badge method">${esc(m)}</span>`).join('');
     card.innerHTML=
       `<div class="bento-top"><span class="cat-dot" style="background:${STATE.catColors[c]}"></span>
          <span class="cat-name">${esc(c)}</span></div>
        <div class="bento-num" style="color:${STATE.catColors[c]}">${cats[c].n}<span class="bento-unit">tasks</span></div>
        <p class="bento-desc">${esc(CAT_DESC[c]||'')}</p>
-       <div class="bento-methods">${methods}</div>`;
+       <div class="bento-methods">${methods}</div>
+       <div class="bento-cta">Run this category →</div>`;
+    card.onclick=()=>showCategory(c);
+    card.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();showCategory(c);}};
     bento.append(card);
   });
 }
@@ -684,6 +880,36 @@ function setRuns(serverRuns){
     .sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||'')));
 }
 
+// Shared row markup + table builder for the global runs table and the per-category
+// one. `datasetKey` ('runId' | 'catRunId') sets which data-* attr carries the run
+// id so each table's highlight logic stays scoped to its own rows.
+function runRowInner(r){
+  return `<td><div class="run-when">${esc(fmtWhen(r.created_at))}</div>
+           <div class="run-id mono">${esc(r.run_id.slice(0,15))}</div></td>
+       <td class="mono small">${esc(r.model||'—')}</td>
+       <td>${statusBadge(r)}${r.recovered?' <span class="muted" style="font-size:11px;white-space:nowrap" title="Reconstructed from run files on disk — was missing from the registry">↻ recovered</span>':''}${r._local?' <span class="muted" style="font-size:11px;white-space:nowrap" title="Saved in this browser — the server no longer has this run (likely ephemeral storage). Attach a persistent disk at /data for shared, server-side history.">💾 local</span>':''}</td>
+       <td>${r.n_tasks??'—'}</td>
+       <td>${r.mean_score!=null?pct(r.mean_score):'—'}</td>
+       <td>${r.pass_rate!=null?pct(r.pass_rate):'—'}</td>
+       <td class="mono">${fmtCost(r.cost_usd)}</td>
+       <td class="mono">${fmtDuration(r.elapsed_seconds)}</td>`;
+}
+function runsTableCard(runs, onRowClick, datasetKey){
+  const card=el('div','card runs-card');
+  card.innerHTML='<table class="runs-table"><thead><tr>'+
+    '<th>Run</th><th>Model</th><th>Status</th><th>Tasks</th>'+
+    '<th>Mean</th><th>pass@.75</th><th>Cost</th><th>Latency</th></tr></thead><tbody></tbody></table>';
+  const tb=card.querySelector('tbody');
+  runs.forEach(r=>{
+    const done=r.status==='completed';
+    const tr=el('tr','run-row'+(done?' clickable':''));
+    if(done) tr.dataset[datasetKey]=r.run_id;
+    tr.innerHTML=runRowInner(r);
+    if(done) tr.onclick=()=>onRowClick(r.run_id);
+    tb.append(tr);
+  });
+  return card;
+}
 function renderRunsTable(){
   const wrap=$('#runsTableWrap');
   const runs=STATE.runs.slice();
@@ -698,29 +924,7 @@ function renderRunsTable(){
   -d '{"provider":"openai","task_ids":["codegen-001"]}'</pre></div>`;
     return;
   }
-  const card=el('div','card runs-card');
-  card.innerHTML='<table class="runs-table"><thead><tr>'+
-    '<th>Run</th><th>Model</th><th>Status</th><th>Tasks</th>'+
-    '<th>Mean</th><th>pass@.75</th><th>Cost</th><th>Latency</th></tr></thead><tbody></tbody></table>';
-  const tb=card.querySelector('tbody');
-  runs.forEach(r=>{
-    const done=r.status==='completed';
-    const tr=el('tr','run-row'+(done?' clickable':''));
-    if(done) tr.dataset.runId=r.run_id;
-    tr.innerHTML=
-      `<td><div class="run-when">${esc(fmtWhen(r.created_at))}</div>
-           <div class="run-id mono">${esc(r.run_id.slice(0,15))}</div></td>
-       <td class="mono small">${esc(r.model||'—')}</td>
-       <td>${statusBadge(r)}${r.recovered?' <span class="muted" style="font-size:11px;white-space:nowrap" title="Reconstructed from run files on disk — was missing from the registry">↻ recovered</span>':''}${r._local?' <span class="muted" style="font-size:11px;white-space:nowrap" title="Saved in this browser — the server no longer has this run (likely ephemeral storage). Attach a persistent disk at /data for shared, server-side history.">💾 local</span>':''}</td>
-       <td>${r.n_tasks??'—'}</td>
-       <td>${r.mean_score!=null?pct(r.mean_score):'—'}</td>
-       <td>${r.pass_rate!=null?pct(r.pass_rate):'—'}</td>
-       <td class="mono">${fmtCost(r.cost_usd)}</td>
-       <td class="mono">${fmtDuration(r.elapsed_seconds)}</td>`;
-    if(done) tr.onclick=()=>selectRun(r.run_id);
-    tb.append(tr);
-  });
-  wrap.innerHTML=''; wrap.append(card);
+  wrap.innerHTML=''; wrap.append(runsTableCard(runs, selectRun, 'runId'));
 
   // Keep the current selection if it's still a completed run; otherwise
   // auto-open the most recent completed run so details are visible by default.
@@ -748,7 +952,7 @@ function applyResultsCollapse(){
   highlightRow(STATE.selectedRun);
 }
 function highlightRow(id){
-  document.querySelectorAll('.run-row').forEach(tr=>{
+  document.querySelectorAll('#runsTableWrap .run-row').forEach(tr=>{
     const sel=tr.dataset.runId===id;
     tr.classList.toggle('active', sel);
     tr.classList.toggle('collapsed', sel && STATE.resultsCollapsed);
@@ -759,8 +963,9 @@ function highlightRow(id){
 $('#refreshRuns').onclick=async()=>{
   const d=await (await fetch('dashboard/data')).json(); setRuns(d.runs); renderRunsTable();
 };
-async function loadRun(id){
-  const body=$('#resultsBody'); body.classList.remove('collapsed'); body.innerHTML='<div class="empty">Loading…</div>';
+// Fetch a run's full report from the server, falling back to the browser cache
+// (the server may have forgotten it on ephemeral storage). Returns it, or null.
+async function fetchReport(id){
   let rep=null;
   try{
     const res=await fetch('dashboard/runs/'+encodeURIComponent(id));
@@ -768,15 +973,18 @@ async function loadRun(id){
   }catch(e){}
   if(rep && !rep.detail){
     const run=STATE.runs.find(x=>x.run_id===id); if(run) lcSaveRun(run, rep);  // cache full report
-    renderReport(rep); return;
+    return rep;
   }
-  // Server forgot this run (ephemeral storage) — fall back to the browser cache.
-  const local=lcReport(id);
-  if(local){ renderReport(local); return; }
-  body.innerHTML='<div class="empty">Could not load run details.</div>';
+  return lcReport(id);  // server forgot it — fall back to this browser's cache
 }
-function renderReport(rep){
-  const body=$('#resultsBody'); body.innerHTML='';
+async function loadRun(id){
+  const body=$('#resultsBody'); body.classList.remove('collapsed'); body.innerHTML='<div class="empty">Loading…</div>';
+  const rep=await fetchReport(id);
+  if(rep) renderReport(rep, body);
+  else body.innerHTML='<div class="empty">Could not load run details.</div>';
+}
+function renderReport(rep, body=$('#resultsBody')){
+  body.innerHTML='';
   const ov=rep.overall||{}; const cost=rep.cost_usd||{}; const lat=rep.latency_seconds||{};
   const modelLabel=rep.model?(rep.provider?`${rep.provider} · ${rep.model}`:rep.model):'—';
   const stats=[['Mean score',pct(ov.mean_score)],['pass@0.75',pct(ov.pass_rate_75)],
@@ -928,31 +1136,14 @@ function openTaskModal(t){
   ov.querySelector('.modal-x').focus();
 }
 
-// ---------- trigger ----------
-$('#runBtn').onclick=async()=>{
-  const prov=currentProvider(), scope=$('#runScope').value, taskId=$('#runTask').value.trim();
-  const model=$('#runModel').value.trim(), key=$('#runKey').value.trim();
-  const st=$('#runStatus'); const btn=$('#runBtn');
-  if(!key){ st.textContent=`Enter your ${prov?prov.label:''} API key — each run uses your own key.`; return; }
-  const payload = taskId ? {task_ids:[taskId]} : (scope==='all'?{}:{categories:[scope]});
-  if(prov) payload.provider=prov.name;
-  if(model) payload.model=model;
-  btn.disabled=true; st.textContent='Submitting…';
-  try{
-    const headers={'Content-Type':'application/json','X-Provider-Api-Key':key};
-    const res=await fetch('runs',{method:'POST',headers,body:JSON.stringify(payload)});
-    if(!res.ok){st.textContent='Error '+res.status+': '+esc(await res.text());btn.disabled=false;return;}
-    const {run_id}=await res.json();
-    st.textContent='Queued '+run_id+' — polling…';
-    poll(run_id,st,btn);
-  }catch(e){ st.textContent='Failed: '+esc(e.message); btn.disabled=false; }
-};
-async function poll(id,st,btn){
+// ---------- run polling (shared by both forms; submit lives in submitRun) ------
+async function poll(id,st,btn,onCompleted){
   for(let i=0;i<600;i++){
     await new Promise(r=>setTimeout(r,3000));
     let d; try{ d=await (await fetch('dashboard/data')).json(); }catch{ continue; }
     setRuns(d.runs);
     renderRunsTable();
+    if(STATE.activeCategory) renderCategoryRuns(STATE.activeCategory);
     const r=STATE.runs.find(x=>x.run_id===id);
     if(!r){st.textContent='Run not found.';break;}
     let lbl=`Status: ${r.status}…`;
@@ -962,16 +1153,211 @@ async function poll(id,st,btn){
       lbl=`${phase} ${p.done}/${p.total}${p.current?' · '+p.current:''}…`;
     }
     st.textContent=lbl;
-    if(r.status==='completed'){st.textContent='Completed ✓';renderRunsTable();selectRun(id);break;}
+    if(r.status==='completed'){
+      st.textContent='Completed ✓'; renderRunsTable();
+      if(onCompleted) onCompleted(id); else selectRun(id);
+      break;
+    }
     if(r.status==='failed'){st.textContent='Run failed — '+esc(r.error||'see server logs');break;}
   }
   btn.disabled=false;
 }
 
-$('#loadModelsBtn').onclick=loadModels;
-// Auto-load models as the key is typed/pasted (debounced), not just on blur.
-let _modelKeyTimer;
-$('#runKey').addEventListener('input',()=>{clearTimeout(_modelKeyTimer);_modelKeyTimer=setTimeout(loadModels,600);});
+// ---------- generic info modal (scoring-method detail drill-in) ----------
+// A second, lightweight modal alongside the per-task one, reusing the same
+// overlay styling. Populated on demand with an arbitrary title/badges/body.
+let _infoModal=null, _infoModalTrigger=null;
+function ensureInfoModal(){
+  if(_infoModal) return _infoModal;
+  const ov=el('div','modal-overlay');
+  ov.innerHTML=`<div class="modal" role="dialog" aria-modal="true" aria-labelledby="imTitle">
+    <div class="modal-head">
+      <div class="mid"><div class="mono" id="imTitle"></div><div class="modal-badges"></div></div>
+      <button class="modal-x" type="button" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-body"></div>
+  </div>`;
+  ov.addEventListener('click',e=>{if(e.target===ov)closeInfoModal();});
+  ov.querySelector('.modal-x').onclick=closeInfoModal;
+  document.body.append(ov);
+  _infoModal=ov; return ov;
+}
+function _infoModalKey(e){ if(e.key==='Escape') closeInfoModal(); }
+function closeInfoModal(){
+  if(!_infoModal) return;
+  _infoModal.classList.remove('open');
+  document.body.style.overflow='';
+  document.removeEventListener('keydown',_infoModalKey);
+  if(_infoModalTrigger&&_infoModalTrigger.focus) _infoModalTrigger.focus();
+}
+function openInfoModal({title,badgesHtml,bodyHtml}){
+  const ov=ensureInfoModal();
+  _infoModalTrigger=document.activeElement;
+  ov.querySelector('#imTitle').textContent=title||'';
+  ov.querySelector('.modal-badges').innerHTML=badgesHtml||'';
+  ov.querySelector('.modal-body').innerHTML=bodyHtml||'';
+  ov.classList.add('open');
+  document.body.style.overflow='hidden';
+  document.addEventListener('keydown',_infoModalKey);
+  ov.querySelector('.modal-x').focus();
+}
+
+// How many tasks (and which categories) a scoring_type covers, computed live.
+function methodUsage(key){
+  const tasks=STATE.tasks.filter(t=>t.scoring_type===key);
+  return {n:tasks.length, cats:[...new Set(tasks.map(t=>t.category))]};
+}
+// Make the static scoring-method cards clickable → open their detail modal.
+function wireMethodCards(){
+  document.querySelectorAll('.method-card[data-method]').forEach(card=>{
+    const key=card.dataset.method;
+    if(!METHOD_DETAIL[key]) return;
+    card.classList.add('clickable');
+    card.tabIndex=0; card.setAttribute('role','button');
+    card.setAttribute('aria-label',`${key} — open scoring details`);
+    if(!card.querySelector('.method-more')) card.append(el('span','method-more','Details →'));
+    card.onclick=()=>openMethodModal(key);
+    card.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openMethodModal(key);}};
+  });
+}
+function openMethodModal(key){
+  const d=METHOD_DETAIL[key]; if(!d) return;
+  let usageHtml;
+  if(key==='pass@0.75'){
+    usageHtml=`<span class="muted-note">Computed across all <b>${STATE.tasks.length}</b> tasks and reported per category.</span>`;
+  }else{
+    const u=methodUsage(key);
+    const cats=u.cats.map(c=>`<span class="badge cat cat-${esc(c)}">${esc(c)}</span>`).join(' ');
+    usageHtml=`<span class="muted-note">Used by <b>${u.n}</b> task${u.n===1?'':'s'}</span>${u.cats.length?' '+cats:''}`;
+  }
+  let h=`<div class="modal-section"><div class="prose">${d.summary}</div>
+      <div style="margin-top:12px">${usageHtml}</div></div>`;
+  h+=`<div class="modal-section"><div class="modal-label">How it works</div>
+      <ol class="method-steps">${d.how.map(s=>`<li>${s}</li>`).join('')}</ol></div>`;
+  if(d.defaults) h+=`<div class="modal-section"><div class="modal-label">${esc(d.defaultsLabel||'Defaults')}</div>
+      <div class="prose">${d.defaults}</div></div>`;
+  h+=`<div class="modal-section"><div class="modal-label">Why this method</div><div class="prose">${d.why}</div></div>`;
+  if(d.example) h+=`<div class="modal-section"><div class="modal-label">${esc(d.example.label||'Example')}</div>`+
+      `${d.example.response?`<pre>${esc(d.example.response)}</pre>`:''}`+
+      `${d.example.note?`<p class="muted-note" style="margin-top:10px">${d.example.note}</p>`:''}</div>`;
+  const tagClass=d.tag==='deterministic'?'easy':d.tag==='model-graded'?'medium':'hard';
+  const tagBadge=d.tag?` <span class="badge ${tagClass}">${esc(d.tag)}</span>`:'';
+  openInfoModal({title:key, badgesHtml:`<span class="badge method">${esc(key)}</span>${tagBadge}`, bodyHtml:h});
+}
+
+// ---------- per-category page (BYOK, scoped to a single category) ----------
+function showCategory(cat){ renderCategory(cat); navTo('category'); }
+function renderCategory(cat){
+  STATE.activeCategory=cat;
+  STATE.selectedCatRun=null;
+  const v=$('#category'); if(!v) return;
+  v.innerHTML='';
+  const color=STATE.catColors[cat]||'#888';
+  const tasks=STATE.tasks.filter(t=>t.category===cat);
+  const methods=[...new Set(tasks.map(t=>t.scoring_type))];
+  const diffs={}; tasks.forEach(t=>{diffs[t.difficulty]=(diffs[t.difficulty]||0)+1;});
+  const diffStr=['easy','medium','hard'].filter(x=>diffs[x]).map(x=>`${diffs[x]} ${x}`).join(' · ')||'—';
+
+  // back to the category overview
+  const back=el('button','btn ghost','← All categories');
+  back.style.marginBottom='18px';
+  back.onclick=()=>{ STATE.activeCategory=null; navTo('overview'); };
+  v.append(back);
+
+  // header
+  const head=el('div');
+  head.innerHTML=
+    `<div class="bento-top" style="margin-bottom:2px">
+       <span class="cat-dot" style="background:${color}"></span>
+       <span class="cat-name">${esc(cat)}</span></div>
+     <h1 style="margin-top:8px">${esc(cat)} evaluation</h1>
+     <p class="lead">${esc(CAT_DESC[cat]||'')} Run just this category on your own model and key — the same
+       harness and scoring as the full benchmark, scoped to these ${tasks.length} ${esc(cat)} task${tasks.length===1?'':'s'}.</p>`;
+  v.append(head);
+
+  // stat cards
+  const sg=el('div','grid cols-4 metrics');
+  [['Tasks',tasks.length],['Scoring methods',methods.length],['Difficulty mix',diffStr],['Pass mark','≥ 0.75']]
+    .forEach(([l,val])=>{
+      const sm=String(val).length>9?' sm':'';
+      const c=el('div','card');
+      c.innerHTML=`<div class="statbig${sm}">${esc(val)}</div><div class="statlabel">${esc(l)}</div>`;
+      sg.append(c);
+    });
+  v.append(sg);
+
+  // scoring methods used here — each chip opens the method-detail modal
+  const mWrap=el('div'); mWrap.style.marginTop='18px';
+  mWrap.append(el('span','statlabel','Scored by'));
+  mWrap.lastChild.style.cssText='margin:0 10px 0 0;display:inline';
+  methods.forEach(m=>{
+    const b=el('span','badge method',esc(m));
+    if(METHOD_DETAIL[m]){ b.style.cursor='pointer'; b.title=`How ${m} scoring works`; b.onclick=()=>openMethodModal(m); }
+    mWrap.append(b); mWrap.append(document.createTextNode(' '));
+  });
+  v.append(mWrap);
+
+  // BYOK trigger form, locked to this category
+  const tsec=el('div','sec-head'); tsec.innerHTML='<h2>Run this category</h2>'; v.append(tsec);
+  const formCard=el('div','card trigger'); formCard.style.marginTop='22px';
+  const f=buildTriggerForm({lockedCategory:cat, onCompleted:id=>{
+    if(STATE.activeCategory!==cat) return;   // user moved to another category meanwhile
+    STATE.selectedCatRun=id; renderCategoryRuns(cat); selectCategoryRun(id);
+  }});
+  formCard.append(f.root);
+  v.append(formCard);
+  renderProviders(f);
+
+  // runs scoped to this category, with drill-in
+  const rsec=el('div','sec-head'); rsec.innerHTML='<h2>Runs in this category</h2>'; v.append(rsec);
+  const note=el('p','note'); note.style.margin='12px 0 0';
+  note.innerHTML=`Only runs triggered for the <b>${esc(cat)}</b> category appear here. Click a completed run for `+
+    `its per-task scores, or see the <a href="#" id="catAllRuns">full results across all runs ↗</a>.`;
+  v.append(note);
+  const runsWrap=el('div'); runsWrap.id='catRunsWrap'; runsWrap.style.marginTop='18px'; v.append(runsWrap);
+  const body=el('div'); body.id='catResultsBody'; v.append(body);
+  $('#catAllRuns').onclick=e=>{ e.preventDefault(); STATE.activeCategory=null; navTo('results'); };
+
+  renderCategoryRuns(cat);
+}
+// A run belongs to a category page when it was triggered scoped to exactly that
+// one category (the dashboard payload carries each run's `categories`).
+function categoryRuns(cat){
+  return STATE.runs.filter(r=>Array.isArray(r.categories) && r.categories.length===1 && r.categories[0]===cat);
+}
+function renderCategoryRuns(cat){
+  const wrap=$('#catRunsWrap'); if(!wrap) return;
+  const body=$('#catResultsBody');
+  const runs=categoryRuns(cat);
+  if(!runs.length){
+    wrap.innerHTML='<div class="card empty">No runs yet for this category.<br><br>'+
+      '<span class="note">Trigger one above with your own key.</span></div>';
+    if(body) body.innerHTML='';
+    return;
+  }
+  wrap.innerHTML=''; wrap.append(runsTableCard(runs, selectCategoryRun, 'catRunId'));
+  if(STATE.selectedCatRun && runs.some(r=>r.run_id===STATE.selectedCatRun && r.status==='completed')){
+    highlightCatRow(STATE.selectedCatRun);
+  }else{
+    const firstDone=runs.find(r=>r.status==='completed');
+    if(firstDone){ selectCategoryRun(firstDone.run_id); }
+    else if(body){ body.innerHTML='<div class="empty">No completed runs yet — trigger one above.</div>'; }
+  }
+}
+function highlightCatRow(id){
+  document.querySelectorAll('#catRunsWrap .run-row').forEach(tr=>{
+    tr.classList.toggle('active', tr.dataset.catRunId===id);
+  });
+}
+async function selectCategoryRun(id){
+  STATE.selectedCatRun=id;
+  highlightCatRow(id);
+  const body=$('#catResultsBody'); if(!body) return;
+  body.innerHTML='<div class="empty">Loading…</div>';
+  const rep=await fetchReport(id);
+  if(rep) renderReport(rep, body);
+  else body.innerHTML='<div class="empty">Could not load run details.</div>';
+}
 
 init();
 </script>
