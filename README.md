@@ -23,7 +23,7 @@ or a hallucinated revenue figure isn't an inconvenience, it's a wrong investment
 
 | Category        | Count | Scoring method        | What it tests |
 |----------------|-------|-----------------------|---------------|
-| extraction      | 5     | exact_json / llm_judge | Parse financial tables, filings, press releases |
+| extraction      | 5     | exact_json / fuzzy_dict / llm_judge | Parse financial tables, filings, press releases |
 | code_generation | 9     | functional (unit tests)| Write correct financial functions |
 | computation     | 6     | fuzzy_number / fuzzy_dict | Financial formulas, ratios, WACC, Altman Z |
 | workflow        | 5     | llm_judge             | Fixed, pre-specified pipeline (do step 1..4) run through the tool loop |
