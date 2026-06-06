@@ -866,5 +866,100 @@
         }
       }
     }
+  },
+  {
+    "id": "agentic_real-004",
+    "category": "agentic_real",
+    "difficulty": "medium",
+    "prompt": "Orion Systems Corp's reported segment gross margins jumped in FY2024 - Cloud and Hardware are both up several points year over year. Determine how much of that improvement is real versus an accounting artifact, and state the like-for-like gross-margin trend for each segment. Use the company's SEC filings (gross margin = (revenue - cost of revenue) / revenue).",
+    "context": null,
+    "expected_output": null,
+    "scoring_type": "llm_judge",
+    "rubric": "Score 4 if: the code fetches BOTH the FY2024 and FY2023 10-K via fetch_sec_filing('Orion Systems Corp','10-K','2024') and ('...','10-K','2023'); computes reported FY2024 margins (Cloud ~47.0%, Hardware ~33.7%) versus FY2023 (Cloud ~41.9%, Hardware ~30.9%); reads Note 3 and recognizes the $68M (Cloud) and $34M (Hardware) support-cost reclassification OUT of FY2024 cost of revenue makes the year-over-year comparison non-like-for-like, then puts FY2024 back on the prior basis by ADDING those costs back into FY2024 cost of revenue to get like-for-like FY2024 margins (Cloud ~43.8%, Hardware ~31.0%); and concludes most of the apparent jump is cosmetic - real like-for-like Cloud expansion is only ~1.9pp (versus ~5.1pp reported) and Hardware is roughly flat. Score 3 if it fetches both, finds the reclassification and adjusts, but has a minor arithmetic slip or characterizes the residual improvement only loosely. Score 2 if it fetches only FY2024 or ignores Note 3 and reports the ~47%/~34% figures as genuine margin expansion (the trap). Score 1 if the approach is sound but it produces no clean like-for-like figure. Score 0 if no code runs.",
+    "max_turns": 8,
+    "tools_data": {
+      "snapshots": {
+        "fetch_sec_filing": {
+          "Orion Systems Corp:10-K:2024": "ORION SYSTEMS CORP\nFORM 10-K - FISCAL YEAR ENDED DECEMBER 31, 2024\n\nSEGMENT RESULTS (in millions)\n                       Revenue    Cost of Revenue\nCloud Solutions        $ 2,140    $ 1,135\nHardware Products      $ 1,280    $   849\n\nNote 3 - Accounting Policy Change: Effective Q1 FY2024, the Company reclassified\nproduct support and warranty costs from Cost of Revenue to Selling, General and\nAdministrative expense, to align with peer presentation. The amounts reclassified\nOUT of FY2024 Cost of Revenue were $68M for Cloud Solutions and $34M for Hardware\nProducts. Prior-year (FY2023) figures were NOT restated for this change and remain\non the previous basis, with support costs included in Cost of Revenue. See the\nFY2023 Form 10-K for prior-period segment detail on the old basis.\n\nSource: Orion Systems Corp Annual Report on Form 10-K, fiscal year ended\nDecember 31, 2024.\n",
+          "Orion Systems Corp:10-K:2023": "ORION SYSTEMS CORP\nFORM 10-K - FISCAL YEAR ENDED DECEMBER 31, 2023\n\nSEGMENT RESULTS (in millions)\n                       Revenue    Cost of Revenue\nCloud Solutions        $ 1,920    $ 1,116\nHardware Products      $ 1,180    $   815\n\nNote: Product support and warranty costs are included within Cost of Revenue for\nall periods presented in this filing.\n\nSource: Orion Systems Corp Annual Report on Form 10-K, fiscal year ended\nDecember 31, 2023.\n"
+        }
+      }
+    }
+  },
+  {
+    "id": "agentic_real-005",
+    "category": "agentic_real",
+    "difficulty": "hard",
+    "prompt": "Cascade Technology Group's Legacy Infrastructure segment revenue fell 57% in FY2024, which looks alarming for a company you would otherwise call a grower. Work out what is really happening to the business mix over FY2022-FY2024, handle anything that makes a segment's reported change misleading, and state the underlying revenue-mix shift. Use the company's filings.",
+    "context": null,
+    "expected_output": null,
+    "scoring_type": "llm_judge",
+    "rubric": "Score 4 if: the code fetches BOTH the FY2024 and FY2023 10-K via fetch_sec_filing('Cascade Technology Group','10-K','2024') and ('...','10-K','2023') - the FY2023 filing is required because FY2022 is not in the FY2024 filing; recognizes from Note 6 that Legacy Infrastructure ceased operations on June 30, 2024, so its $310M FY2024 figure is H1-only, and annualizes it to ~$620M for a like-for-like comparison (a ~14% decline versus FY2023's $720M, not the headline -57%); computes the revenue mix across all three years and reports that the real story is Cloud Platform rising from ~41% of revenue in FY2022 to ~47% in FY2023 to ~60% as reported in FY2024 (~54% if Legacy is annualized), with Legacy winding down as planned rather than collapsing. Score 3 if it fetches both, identifies the discontinuation, annualizes Legacy, and gets the mix shift directionally right, but with a minor slip or without all three years. Score 2 if it takes the -57% at face value as a business decline with no annualization, or never fetches the FY2023 filing so it cannot establish the FY2022 baseline (the trap). Score 1 if the approach is sound but it produces no clean mix analysis. Score 0 if no code runs.",
+    "max_turns": 8,
+    "tools_data": {
+      "snapshots": {
+        "fetch_sec_filing": {
+          "Cascade Technology Group:10-K:2024": "CASCADE TECHNOLOGY GROUP\nFORM 10-K - FISCAL YEAR ENDED DECEMBER 31, 2024\n\nSEGMENT REVENUE (in millions)\n                            FY2024    FY2023\nCloud Platform             $ 1,840   $ 1,220\nSecurity & Compliance      $   920   $   640\nLegacy Infrastructure      $   310   $   720\nTotal                      $ 3,070   $ 2,580\n\nNote 6 - Discontinued Operations: The Legacy Infrastructure segment ceased\noperations on June 30, 2024 (the end of the second fiscal quarter). The FY2024\nLegacy Infrastructure revenue of $310M therefore reflects the first half of the\nyear only; no Legacy revenue was recognized in the second half of FY2024. The\nwind-down was planned. Cloud Platform and Security & Compliance growth is organic.\nFor segment detail prior to FY2023, refer to the FY2023 Form 10-K.\n\nSource: Cascade Technology Group Annual Report on Form 10-K, fiscal year ended\nDecember 31, 2024.\n",
+          "Cascade Technology Group:10-K:2023": "CASCADE TECHNOLOGY GROUP\nFORM 10-K - FISCAL YEAR ENDED DECEMBER 31, 2023\n\nSEGMENT REVENUE (in millions)\n                            FY2023    FY2022\nCloud Platform             $ 1,220   $   890\nSecurity & Compliance      $   640   $   480\nLegacy Infrastructure      $   720   $   780\nTotal                      $ 2,580   $ 2,150\n\nSource: Cascade Technology Group Annual Report on Form 10-K, fiscal year ended\nDecember 31, 2023.\n"
+        }
+      }
+    }
+  },
+  {
+    "id": "agentic_real-006",
+    "category": "agentic_real",
+    "difficulty": "medium",
+    "prompt": "Summit Manufacturing Inc's days-sales-outstanding (DSO) appears to have jumped sharply in FY2024, and the credit team wants to know whether this is operational deterioration or something else. Quantify the DSO change, identify what is driving it, strip out anything that is not organic, and state the organic DSO trend. Use the company's filings (DSO = accounts receivable / revenue * 365).",
+    "context": null,
+    "expected_output": null,
+    "scoring_type": "llm_judge",
+    "rubric": "Score 4 if: the code fetches BOTH the FY2024 and FY2023 10-K via fetch_sec_filing('Summit Manufacturing Inc','10-K','2024') and ('...','10-K','2023'); computes DSO of ~42 days for FY2023 (380/3280*365) rising to ~63 days for FY2024 (780/4520*365); reads Note 8 and recognizes the Ridgeline acquisition added $180M of accounts receivable and $310M of revenue, removes BOTH to compute organic AR of $600M and organic revenue of $4,210M and hence an organic DSO of ~52 days; and concludes the headline ~21-day rise is predominantly inorganic - organic DSO rose only ~10 days (42 to ~52), so this is mostly acquisition mix rather than a collections problem. Score 3 if it fetches both, identifies the acquisition and adjusts accounts receivable, but uses total (not organic) revenue in the organic-DSO denominator or has a minor slip. Score 2 if it reports the ~42 to ~63 day rise as operational deterioration without fetching or applying Note 8 (the trap). Score 1 if the approach is sound but it produces no clean organic figure. Score 0 if no code runs.",
+    "max_turns": 8,
+    "tools_data": {
+      "snapshots": {
+        "fetch_sec_filing": {
+          "Summit Manufacturing Inc:10-K:2024": "SUMMIT MANUFACTURING INC\nFORM 10-K - FISCAL YEAR ENDED DECEMBER 31, 2024\n\nSELECTED BALANCE SHEET AND INCOME DATA (in millions)\nAccounts receivable, net    $   780\nRevenue                     $ 4,520\n\nNote 8 - Business Combination: On September 1, 2024, the Company acquired\nRidgeline Components Inc. The acquired business contributed $180M of accounts\nreceivable at the acquisition date (included in the year-end balance above) and\n$310M of revenue from September 1 through December 31, 2024 (included in revenue\nabove). Prior-year amounts do not include Ridgeline. See the FY2023 Form 10-K for\nthe comparative receivables and revenue.\n\nSource: Summit Manufacturing Inc Annual Report on Form 10-K, fiscal year ended\nDecember 31, 2024.\n",
+          "Summit Manufacturing Inc:10-K:2023": "SUMMIT MANUFACTURING INC\nFORM 10-K - FISCAL YEAR ENDED DECEMBER 31, 2023\n\nSELECTED BALANCE SHEET AND INCOME DATA (in millions)\nAccounts receivable, net    $   380\nRevenue                     $ 3,280\n\nSource: Summit Manufacturing Inc Annual Report on Form 10-K, fiscal year ended\nDecember 31, 2023.\n"
+        }
+      }
+    }
+  },
+  {
+    "id": "agentic_real-007",
+    "category": "agentic_real",
+    "difficulty": "hard",
+    "prompt": "Apex Holdings Ltd reported no goodwill impairment in FY2024 and its goodwill balances are unchanged year over year. Decide whether that clean result should be taken at face value, focusing on the Industrial Automation reporting unit. Use the company's filings to support a clear risk view.",
+    "context": null,
+    "expected_output": null,
+    "scoring_type": "llm_judge",
+    "rubric": "Score 4 if: the code fetches the FY2024 10-K and the FY2023 10-K via fetch_sec_filing('Apex Holdings Ltd','10-K','2024') and ('...','10-K','2023') - the FY2023 filing is needed for FY2022; establishes that Industrial Automation revenue fell from $550M (FY2022) to $500M (FY2023) to $410M (FY2024), a ~25% cumulative decline, with operating margin compressing from ~14% to ~6%; reads Note 9 and flags that, despite this sustained deterioration, the Company performed only a QUALITATIVE goodwill assessment for Industrial Automation (no quantitative test), while its $620M of goodwill is ~151% of FY2024 segment revenue; and concludes the 'no impairment' result is a red flag worth scrutiny - a qualitative-only assessment is hard to justify for a unit with two years of falling revenue and margins. Score 3 if it identifies the revenue/margin decline and the qualitative-only test as a concern but does not quantify the goodwill-to-revenue ratio or the cumulative decline. Score 2 if it simply reports goodwill unchanged and no impairment recorded, missing the qualitative-only assessment issue (the trap). Score 1 if the approach is sound but it produces no clear risk view. Score 0 if no code runs.",
+    "max_turns": 8,
+    "tools_data": {
+      "snapshots": {
+        "fetch_sec_filing": {
+          "Apex Holdings Ltd:10-K:2024": "APEX HOLDINGS LTD\nFORM 10-K - FISCAL YEAR ENDED DECEMBER 31, 2024\n\nGOODWILL BY REPORTING UNIT (in millions)\n                          FY2024    FY2023\nIndustrial Automation     $   620   $   620\nHealthcare Technology     $   380   $   380\nConsumer Products         $    95   $    95\nTotal                     $ 1,095   $ 1,095\n\nSEGMENT RESULTS - Industrial Automation (in millions)\n                          FY2024    FY2023\nRevenue                   $   410   $   500\nOperating income          $    25   $    70\n\nNote 9 - Goodwill Impairment Testing: The Company performs its annual goodwill\nimpairment test as of October 1. For Industrial Automation and Consumer Products,\nthe Company performed a QUALITATIVE assessment only and concluded it was more\nlikely than not that fair value exceeds carrying value; no quantitative test was\nperformed. For Healthcare Technology, a quantitative test was performed and\nindicated headroom; no impairment. No goodwill was impaired in FY2024. For\nIndustrial Automation revenue prior to FY2023, see the FY2023 Form 10-K.\n\nSource: Apex Holdings Ltd Annual Report on Form 10-K, fiscal year ended\nDecember 31, 2024.\n",
+          "Apex Holdings Ltd:10-K:2023": "APEX HOLDINGS LTD\nFORM 10-K - FISCAL YEAR ENDED DECEMBER 31, 2023\n\nSEGMENT RESULTS - Industrial Automation (in millions)\n                          FY2023    FY2022\nRevenue                   $   500   $   550\nOperating income          $    70   $    77\n\nNote 9 - Goodwill: Qualitative assessments were performed for all reporting units;\nno impairment indicated. Goodwill by unit was unchanged from FY2022.\n\nSource: Apex Holdings Ltd Annual Report on Form 10-K, fiscal year ended\nDecember 31, 2023.\n"
+        }
+      }
+    }
+  },
+  {
+    "id": "agentic_real-008",
+    "category": "agentic_real",
+    "difficulty": "hard",
+    "prompt": "Meridian Tech Solutions reports strong operating cash flow - FY2024 cash from operations exceeds net income. Before your team relies on that as evidence of high earnings quality, pressure-test it: compute the cash-conversion (CFO / net income) trend, adjust for anything non-recurring, and state your view on the underlying earnings quality. Use the company's filings.",
+    "context": null,
+    "expected_output": null,
+    "scoring_type": "llm_judge",
+    "rubric": "Score 4 if: the code fetches BOTH the FY2024 and FY2023 10-K via fetch_sec_filing('Meridian Tech Solutions','10-K','2024') and ('...','10-K','2023'); computes CFO/Net-Income of ~1.18x in FY2024 (401/340) and ~1.09x in FY2023 (315/290), both superficially healthy; reads Note 12 and recognizes the $90M inventory reduction is a one-time, non-recurring source of operating cash flow, removes it to get adjusted FY2024 CFO of $311M and an adjusted CFO/NI of ~0.91x; and concludes underlying cash conversion is materially weaker than the headline - around or below 1.0x and set to weaken as inventory rebuilds - so the 'strong CFO' is partly non-recurring rather than evidence of high earnings quality. Computing the Sloan accrual (net income minus CFO) as supporting evidence is a plus. Score 3 if it computes both years' CFO/NI and adjusts for the $90M one-off but characterizes the conclusion loosely. Score 2 if it reports the ~1.18x headline as strong earnings quality without fetching or applying Note 12 (the trap). Score 1 if the approach is sound but it produces no adjusted figure. Score 0 if no code runs.",
+    "max_turns": 8,
+    "tools_data": {
+      "snapshots": {
+        "fetch_sec_filing": {
+          "Meridian Tech Solutions:10-K:2024": "MERIDIAN TECH SOLUTIONS\nFORM 10-K - FISCAL YEAR ENDED DECEMBER 31, 2024\n\nCONSOLIDATED STATEMENT OF CASH FLOWS - OPERATING (in millions)\nNet income                                         $ 340\nDepreciation and amortization                      $  82\nChanges in operating assets and liabilities:\n  Accounts receivable                              $ (45)\n  Inventories                                      $  90\n  Accounts payable                                 $  17\n  Accrued liabilities                              $  (9)\n  Other                                            $ (74)\nNet cash provided by operating activities          $ 401\n\nNote 12 - Inventories: The Company reduced safety-stock inventory levels during\nFY2024 following a one-time supply-chain normalization. The associated $90M\ninventory reduction is a non-recurring source of operating cash flow and is not\nexpected to repeat in FY2025; management expects inventory to rebuild as demand\nrecovers. See the FY2023 Form 10-K for prior-year operating cash flow.\n\nSource: Meridian Tech Solutions Annual Report on Form 10-K, fiscal year ended\nDecember 31, 2024.\n",
+          "Meridian Tech Solutions:10-K:2023": "MERIDIAN TECH SOLUTIONS\nFORM 10-K - FISCAL YEAR ENDED DECEMBER 31, 2023\n\nCONSOLIDATED STATEMENT OF CASH FLOWS - OPERATING (in millions)\nNet income                                         $ 290\nDepreciation and amortization                      $  74\nChanges in operating assets and liabilities (net)  $ (49)\nNet cash provided by operating activities          $ 315\n\nSource: Meridian Tech Solutions Annual Report on Form 10-K, fiscal year ended\nDecember 31, 2023.\n"
+        }
+      }
+    }
   }
 ]

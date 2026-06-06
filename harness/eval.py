@@ -19,8 +19,9 @@ TASKS_FILE = Path("tasks/tasks.json")
 
 # Bumped whenever tasks or scoring semantics change, so runs recorded under an
 # older methodology are never silently compared against newer ones. Surfaced in
-# the report as `benchmark_version`.
-BENCHMARK_VERSION = "1.1.0"
+# the report as `benchmark_version`. 1.2.0: scoring-comparability work + the
+# agentic_real expansion from 3 to 8 synthetic two-filing tasks.
+BENCHMARK_VERSION = "1.2.0"
 
 
 def _diagnostic_enabled() -> bool:

@@ -223,3 +223,57 @@ def test_all_code_generation_tasks_have_room_to_iterate():
     for t in TASKS.values():
         if t["category"] == "code_generation":
             assert t["max_turns"] >= 8, f"{t['id']} max_turns={t['max_turns']} (<8)"
+
+
+# ── Phase 5: expanded agentic_real tasks must demand real agentic work ──────────
+# The original three agentic_real tasks used a single clean snapshot of a real
+# mega-cap (memorizable, no data-quality challenge). The five new ones use
+# synthetic companies, require fetching TWO filings, and embed a trap that a
+# careless reader falls for. These structural invariants guard that design.
+_NEW_AGENTIC_REAL = [f"agentic_real-{n:03d}" for n in range(4, 9)]
+
+
+def test_expanded_agentic_real_tasks_exist():
+    for tid in _NEW_AGENTIC_REAL:
+        assert tid in TASKS, f"missing {tid}"
+    # The category grew from 3 to 8 — a more stable sample than the original 3.
+    assert sum(1 for t in TASKS.values() if t["category"] == "agentic_real") == 8
+
+
+def test_new_agentic_real_require_two_filings_and_judge():
+    for tid in _NEW_AGENTIC_REAL:
+        t = TASKS[tid]
+        assert t["category"] == "agentic_real"
+        assert t["scoring_type"] == "llm_judge"
+        assert t["max_turns"] >= 8
+        filings = t["tools_data"]["snapshots"]["fetch_sec_filing"]
+        # Two filings → the model cannot answer from a single fetch.
+        assert len(filings) >= 2, f"{tid} should require >=2 filings, has {len(filings)}"
+        # Rubric must score the trap (fetch only one / take headline at face value).
+        assert "trap" in t["rubric"].lower(), f"{tid} rubric should name the trap"
+
+
+def test_new_agentic_real_use_synthetic_companies():
+    # No real mega-caps (avoids training-data contamination the originals risk).
+    blob = " ".join(
+        k for tid in _NEW_AGENTIC_REAL
+        for k in TASKS[tid]["tools_data"]["snapshots"]["fetch_sec_filing"]
+    ).lower()
+    for real in ("microsoft", "nvidia", "apple", "amazon", "google", "meta"):
+        assert real not in blob, f"new task references real company {real!r}"
+
+
+def test_new_agentic_real_snapshots_do_not_leak_the_answer():
+    # The snapshots must hand over RAW inputs only — never the pre-computed adjusted
+    # metric the rubric asks the model to derive. (Guards against turning an
+    # analysis task back into a reading-comprehension task.)
+    leaks = {
+        "agentic_real-004": ["43.8", "47.0%", "like-for-like margin"],
+        "agentic_real-005": ["annualized", "54%", "60%"],
+        "agentic_real-006": ["52 day", "organic dso"],
+        "agentic_real-008": ["0.91", "adjusted cfo/ni"],
+    }
+    for tid, banned in leaks.items():
+        text = " ".join(TASKS[tid]["tools_data"]["snapshots"]["fetch_sec_filing"].values()).lower()
+        for phrase in banned:
+            assert phrase.lower() not in text, f"{tid} snapshot leaks computed answer: {phrase!r}"
