@@ -124,6 +124,7 @@
   .cat-extraction{background:#e9eef3;color:#3f5f7a;border-color:#d8e2ea}
   .cat-code_generation{background:#eee9f2;color:#5c4a6d;border-color:#e1d8e7}
   .cat-computation{background:#e9efe6;color:#4d6346;border-color:#dae2d4}
+  .cat-workflow{background:#e3efed;color:#356b66;border-color:#cfe4e0}
   .cat-agentic{background:#f4ecdd;color:#7b5d36;border-color:#eaddc7}
   .cat-debug{background:#f3e7e3;color:#7d4a42;border-color:#e9d4cd}
   /* difficulty badges — muted */
@@ -320,15 +321,16 @@
     <h1>A coding-agent eval suite for financial data tasks</h1>
     <p class="lead">FinCodeBench measures how well a coding agent does the core work of financial professionals:
     pulling structured data out of financial tables, filings, press releases, transcripts, and presentations; writing
-    correct financial code from scratch; working through multi-step problems agentically — writing code, running it,
-    reading the output, and refining until the numbers come out right; and fixing bugs in broken financial models like
-    valuation, forecasting, and ratio code.</p>
+    correct financial code from scratch; running fixed multi-step workflows — writing code, running it, reading the
+    output, and refining until the numbers come out right; working agentically on open-ended problems — discovering data
+    across several tools, deciding an approach, and reconciling messy inputs; and fixing bugs in broken financial models
+    like valuation, forecasting, and ratio code.</p>
   </div>
 
   <div class="grid cols-4 metrics" id="overviewStats"></div>
 
   <div class="sec-head"><h2>Task categories</h2></div>
-  <p class="lead">Every task belongs to one of five categories. The category determines what is tested; each task's
+  <p class="lead">Every task belongs to one of six categories. The category determines what is tested; each task's
   scoring method is then chosen to fit the shape of its correct answer (see below). Counts are computed live from the
   loaded task set.</p>
   <div class="bento" id="catBento"></div>
@@ -368,10 +370,12 @@
   <div style="margin-top:28px">
     <div class="card">
       <h3>The runner loop</h3>
-      <p class="note" style="margin-top:8px">The agent receives the task prompt (plus any context data) and exactly one
+      <p class="note" style="margin-top:8px">The agent receives the task prompt (plus any context data) and at least one
       tool: <code>execute_python</code>, which runs Python in a sandboxed subprocess (30s timeout) and returns
-      stdout/stderr. It loops up to the task's <code>max_turns</code>, calling the tool as needed. Every turn, tool call,
-      and output is captured as a full trajectory. <code>max_tokens</code> = 4096 per turn.</p>
+      stdout/stderr. <b>Agentic</b> tasks add data tools — <code>list_files</code> / <code>read_file</code> over a private
+      working directory and <code>fetch_filing</code> over a filings service whose data never touches disk — so the agent
+      must choose which tool to call, and when, based on what it finds. It loops up to the task's <code>max_turns</code>;
+      every turn, tool call, and output is captured as a full trajectory. <code>max_tokens</code> = 4096 per turn.</p>
       <p class="note">Runner model is configurable via <code>FINCODEBENCH_MODEL</code> (default
       <code>claude-haiku-4-5</code>).</p>
     </div>
@@ -418,6 +422,7 @@
         <option value="extraction">Category: extraction</option>
         <option value="code_generation">Category: code_generation</option>
         <option value="computation">Category: computation</option>
+        <option value="workflow">Category: workflow</option>
         <option value="agentic">Category: agentic</option>
         <option value="debug">Category: debug</option>
       </select>
@@ -442,12 +447,13 @@
 <script>
 const STATE = {tasks:[], runs:[], providers:[], selectedRun:null, resultsCollapsed:false, catColors:{
   extraction:'#5b7c99', code_generation:'#7d6794', computation:'#5f7e55',
-  agentic:'#a6793f', debug:'#a85a4f'}};
+  workflow:'#3f8079', agentic:'#a6793f', debug:'#a85a4f'}};
 const CAT_DESC = {
   extraction:'Parse financial tables, filings, and press releases into structured data.',
   code_generation:'Write correct financial functions from a spec.',
   computation:'Financial formulas and ratios — gross margin, WACC, Altman Z-Score.',
-  agentic:'Multi-step: parse data, compute, then summarize a conclusion.',
+  workflow:'Fixed, pre-specified pipeline run through the tool loop — the steps are given; the agent executes and self-corrects.',
+  agentic:'Open-ended: discover data across multiple tools, decide an approach, reconcile messy inputs, then conclude.',
   debug:'Find and fix bugs in broken financial code.'};
 const $ = s => document.querySelector(s);
 const el = (t,c,h)=>{const e=document.createElement(t);if(c)e.className=c;if(h!=null)e.innerHTML=h;return e;};
@@ -546,7 +552,7 @@ function renderOverview(){
     cats[t.category].n++; cats[t.category].methods.add(t.scoring_type);
     diffs[t.difficulty]=(diffs[t.difficulty]||0)+1;
   });
-  const order=['extraction','code_generation','computation','agentic','debug'];
+  const order=['extraction','code_generation','computation','workflow','agentic','debug'];
   // top-line metric blocks
   $('#overviewStats').innerHTML='';
   const stats=[['Tasks',STATE.tasks.length],['Categories',Object.keys(cats).length],
@@ -603,6 +609,7 @@ function drawTasks(){
        <div class="body">
          <div class="label">Prompt</div><div class="full-prompt">${esc(t.prompt)}</div>
          ${t.context?`<div class="label">Context provided to the agent</div><pre>${esc(t.context)}</pre>`:''}
+         ${toolsDataHtml(t)}
          <div class="label">Scoring target · ${esc(t.scoring_type)}${t.tolerance!=null?` · tolerance ±${esc(t.tolerance)}`:''} · max turns ${t.max_turns??'—'}</div>
          ${target}
        </div>`;
@@ -614,6 +621,21 @@ function targetHtml(t){
   if(t.scoring_type==='llm_judge')  return `<div class="full-prompt">${esc(t.rubric||'')}</div>`;
   if(t.expected_output!=null) return `<pre>${esc(JSON.stringify(t.expected_output,null,2))}</pre>`;
   return '<div class="muted">—</div>';
+}
+// Agentic tasks carry their data behind tools (no inline context); show the
+// tool set, each seeded file, and the fetch_filing records the agent can pull.
+function toolsDataHtml(t){
+  const td=t.tools_data; if(!td) return '';
+  const files=td.files||{}, filings=td.filings||{}, fnames=Object.keys(files);
+  const tools=['execute_python'];
+  if(fnames.length) tools.push('list_files','read_file');
+  if(Object.keys(filings).length) tools.push('fetch_filing');
+  let h=`<div class="label">Tools &amp; data available to the agent</div>`;
+  h+=`<p class="note" style="margin:4px 0 8px">Tools: ${tools.map(x=>`<code>${esc(x)}</code>`).join(', ')}</p>`;
+  h+=fnames.map(fn=>`<details style="margin-top:6px"><summary class="muted-note" style="cursor:pointer">file · ${esc(fn)}</summary><pre>${esc(files[fn])}</pre></details>`).join('');
+  if(Object.keys(filings).length)
+    h+=`<details style="margin-top:6px"><summary class="muted-note" style="cursor:pointer">fetch_filing records (not on disk)</summary><pre>${esc(JSON.stringify(filings,null,2))}</pre></details>`;
+  return h;
 }
 
 // ---------- results ----------
@@ -790,7 +812,7 @@ function renderReport(rep){
     '<span style="color:var(--red)">■ &lt;50%</span> '+
     '<span style="color:var(--gray)">■ unscored</span>'));
   const byCat={}; (rep.task_scores||[]).forEach(t=>{(byCat[t.category]=byCat[t.category]||[]).push(t);});
-  ['extraction','code_generation','computation','agentic','debug'].filter(c=>byCat[c]).forEach(c=>{
+  ['extraction','code_generation','computation','workflow','agentic','debug'].filter(c=>byCat[c]).forEach(c=>{
     const g=el('div','heatgroup'); g.append(el('div','gl',c));
     const row=el('div','heat');
     byCat[c].forEach(t=>{const cell=el('div','cell');cell.style.background=scoreColor(t.score);
@@ -889,6 +911,7 @@ function openTaskModal(t){
     h+=`<div class="modal-section"><div class="modal-label">Task</div>
       <div class="prose">${esc(task.prompt)}</div>`;
     if(task.context) h+=`<details style="margin-top:10px"><summary class="muted-note" style="cursor:pointer">Context provided to the agent</summary><pre style="margin-top:10px">${esc(task.context)}</pre></details>`;
+    if(task.tools_data) h+=toolsDataHtml(task);
     h+=`</div>`;
   }
   // Output (the agent's final response, carried on the report's task_scores)

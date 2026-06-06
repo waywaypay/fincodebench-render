@@ -440,7 +440,7 @@ app = FastAPI(
 
 
 # ── Request/response models ───────────────────────────────────────────────────
-VALID_CATEGORIES = {"extraction", "code_generation", "computation", "agentic", "debug"}
+VALID_CATEGORIES = {"extraction", "code_generation", "computation", "workflow", "agentic", "debug"}
 
 class RunRequest(BaseModel):
     task_ids: Optional[list[str]] = None

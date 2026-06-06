@@ -5,7 +5,12 @@
     "difficulty": "easy",
     "prompt": "Extract the following financial metrics from the 10-Q excerpt below and return as JSON with keys: revenue, gross_profit, operating_income, net_income. All values in millions USD as floats.",
     "context": "CONSOLIDATED STATEMENTS OF OPERATIONS (in millions)\nNet revenues: $23,451\nCost of revenues: $12,314\nGross profit: $11,137\nOperating expenses:\n  Research and development: $3,287\n  Sales and marketing: $2,104\n  General and administrative: $891\nTotal operating expenses: $6,282\nIncome from operations: $4,855\nOther income, net: $342\nIncome before taxes: $5,197\nProvision for income taxes: $892\nNet income: $4,305",
-    "expected_output": {"revenue": 23451.0, "gross_profit": 11137.0, "operating_income": 4855.0, "net_income": 4305.0},
+    "expected_output": {
+      "revenue": 23451.0,
+      "gross_profit": 11137.0,
+      "operating_income": 4855.0,
+      "net_income": 4305.0
+    },
     "scoring_type": "exact_json",
     "max_turns": 3
   },
@@ -15,7 +20,12 @@
     "difficulty": "medium",
     "prompt": "Parse the earnings press release below and extract guidance. Return JSON with keys: revenue_guidance_low, revenue_guidance_high, eps_guidance_low, eps_guidance_high. Values as floats (revenue in millions, EPS in dollars).",
     "context": "FOR IMMEDIATE RELEASE\nQ3 2024 Earnings Results\n\nThe company reported Q3 net revenue of $4.2 billion, up 18% year-over-year.\n\nOutlook:\nFor Q4 2024, the company expects:\n- Net revenue in the range of $4.6 billion to $4.8 billion\n- GAAP EPS between $2.45 and $2.65\n- Non-GAAP EPS in the range of $3.10 to $3.30\n\nFor the full year 2024, the company now expects net revenue of approximately $17.5 billion to $17.7 billion.",
-    "expected_output": {"revenue_guidance_low": 4600.0, "revenue_guidance_high": 4800.0, "eps_guidance_low": 2.45, "eps_guidance_high": 2.65},
+    "expected_output": {
+      "revenue_guidance_low": 4600.0,
+      "revenue_guidance_high": 4800.0,
+      "eps_guidance_low": 2.45,
+      "eps_guidance_high": 2.65
+    },
     "scoring_type": "exact_json",
     "max_turns": 3
   },
@@ -26,10 +36,30 @@
     "prompt": "From the segment revenue table below, extract quarterly revenues by segment for all periods shown. Return JSON with structure: {segment_name: {period: revenue_millions}}",
     "context": "SEGMENT INFORMATION (in millions)\n                     Q3 2024   Q2 2024   Q1 2024   Q3 2023\nCloud Services       $8,421    $7,934    $7,356    $6,281\nSoftware Licenses    $2,103    $1,987    $2,456    $1,834\nProfessional Svcs    $1,245    $1,189    $1,102    $1,087\nHardware             $892      $1,023    $987      $934\nTotal                $12,661   $12,133   $11,901   $10,136",
     "expected_output": {
-      "Cloud Services": {"Q3 2024": 8421.0, "Q2 2024": 7934.0, "Q1 2024": 7356.0, "Q3 2023": 6281.0},
-      "Software Licenses": {"Q3 2024": 2103.0, "Q2 2024": 1987.0, "Q1 2024": 2456.0, "Q3 2023": 1834.0},
-      "Professional Svcs": {"Q3 2024": 1245.0, "Q2 2024": 1189.0, "Q1 2024": 1102.0, "Q3 2023": 1087.0},
-      "Hardware": {"Q3 2024": 892.0, "Q2 2024": 1023.0, "Q1 2024": 987.0, "Q3 2023": 934.0}
+      "Cloud Services": {
+        "Q3 2024": 8421.0,
+        "Q2 2024": 7934.0,
+        "Q1 2024": 7356.0,
+        "Q3 2023": 6281.0
+      },
+      "Software Licenses": {
+        "Q3 2024": 2103.0,
+        "Q2 2024": 1987.0,
+        "Q1 2024": 2456.0,
+        "Q3 2023": 1834.0
+      },
+      "Professional Svcs": {
+        "Q3 2024": 1245.0,
+        "Q2 2024": 1189.0,
+        "Q1 2024": 1102.0,
+        "Q3 2023": 1087.0
+      },
+      "Hardware": {
+        "Q3 2024": 892.0,
+        "Q2 2024": 1023.0,
+        "Q1 2024": 987.0,
+        "Q3 2023": 934.0
+      }
     },
     "scoring_type": "exact_json",
     "max_turns": 3
@@ -84,7 +114,12 @@
     "difficulty": "easy",
     "prompt": "Given the quarterly revenue data below, compute the gross margin percentage for each quarter. Return results as a Python dict with quarter keys and gross margin as a float rounded to 4 decimal places (e.g. 0.4523 for 45.23%).",
     "context": "Quarter | Revenue ($M) | COGS ($M)\nQ1 2024 | 5,234        | 2,891\nQ2 2024 | 5,567        | 3,012\nQ3 2024 | 5,891        | 3,156\nQ4 2024 | 6,234        | 3,287",
-    "expected_output": {"Q1 2024": 0.4474, "Q2 2024": 0.4592, "Q3 2024": 0.4645, "Q4 2024": 0.4729},
+    "expected_output": {
+      "Q1 2024": 0.4474,
+      "Q2 2024": 0.4592,
+      "Q3 2024": 0.4645,
+      "Q4 2024": 0.4729
+    },
     "scoring_type": "fuzzy_dict",
     "tolerance": 0.001,
     "max_turns": 3
@@ -95,7 +130,11 @@
     "difficulty": "medium",
     "prompt": "Compute the unlevered free cash flow for each year from the data below. UFCF = EBIT * (1 - tax_rate) + D&A - CapEx - Change in Working Capital. Return as a dict with year keys and UFCF values in millions, rounded to 2 decimal places.",
     "context": "Year  | EBIT ($M) | D&A ($M) | CapEx ($M) | Delta WC ($M) | Tax Rate\n2021  | 1,200     | 340      | 450        | 85            | 21%\n2022  | 1,450     | 365      | 510        | 120           | 21%\n2023  | 1,680     | 390      | 480        | 95            | 21%",
-    "expected_output": {"2021": 1153.0, "2022": 1380.5, "2023": 1615.2},
+    "expected_output": {
+      "2021": 1153.0,
+      "2022": 1380.5,
+      "2023": 1615.2
+    },
     "scoring_type": "fuzzy_dict",
     "tolerance": 1.0,
     "max_turns": 3
@@ -112,19 +151,19 @@
     "max_turns": 3
   },
   {
-    "id": "agentic-001",
-    "category": "agentic",
+    "id": "workflow-001",
+    "category": "workflow",
     "difficulty": "medium",
     "prompt": "I've provided quarterly revenue data for 3 companies as a CSV string below. Write and execute Python code to: (1) parse the data, (2) compute YoY revenue growth for each company for each quarter where possible, (3) identify which company had the highest average YoY growth, (4) print the winner and its average growth rate.",
     "context": "company,quarter,revenue\nAlpha Corp,Q1 2023,1200\nAlpha Corp,Q2 2023,1350\nAlpha Corp,Q3 2023,1420\nAlpha Corp,Q4 2023,1560\nAlpha Corp,Q1 2024,1440\nAlpha Corp,Q2 2024,1620\nAlpha Corp,Q3 2024,1710\nAlpha Corp,Q4 2024,1890\nBeta Inc,Q1 2023,890\nBeta Inc,Q2 2023,920\nBeta Inc,Q3 2023,980\nBeta Inc,Q4 2023,1050\nBeta Inc,Q1 2024,1080\nBeta Inc,Q2 2024,1150\nBeta Inc,Q3 2024,1240\nBeta Inc,Q4 2024,1380\nGamma LLC,Q1 2023,2100\nGamma LLC,Q2 2023,2050\nGamma LLC,Q3 2023,2200\nGamma LLC,Q4 2023,2350\nGamma LLC,Q1 2024,2310\nGamma LLC,Q2 2024,2420\nGamma LLC,Q3 2024,2580\nGamma LLC,Q4 2024,2700",
     "expected_output": null,
     "scoring_type": "llm_judge",
-    "rubric": "Score 4 if: code runs without error, correctly computes YoY growth, correctly identifies Beta Inc as the winner (~31% avg growth), and prints clear output. Score 3 if correct winner but minor calculation error. Score 2 if code runs but wrong winner. Score 1 if code has bugs but approach is sound. Score 0 if no code or code crashes immediately.",
+    "rubric": "Score 4 if: code runs without error, correctly computes YoY growth, correctly identifies Beta Inc as the winner (~26% average YoY growth; note 31% is only Beta's single best quarter, not its average), and prints clear output. Score 3 if correct winner but minor calculation error. Score 2 if code runs but wrong winner. Score 1 if code has bugs but approach is sound. Score 0 if no code or code crashes immediately.",
     "max_turns": 8
   },
   {
-    "id": "agentic-002",
-    "category": "agentic",
+    "id": "workflow-002",
+    "category": "workflow",
     "difficulty": "hard",
     "prompt": "Given the financial data CSV below, write and execute Python code to build a simple revenue forecasting model. Use the last 4 quarters as a training set, fit a linear trend to the data, and forecast the next 2 quarters. Print: (1) the slope of the trend, (2) the forecasted values, (3) an estimate of forecast uncertainty using the RMSE of the training fit.",
     "context": "quarter,revenue\nQ1 2022,1100\nQ2 2022,1150\nQ3 2022,1220\nQ4 2022,1290\nQ1 2023,1340\nQ2 2023,1420\nQ3 2023,1510\nQ4 2023,1590\nQ1 2024,1670\nQ2 2024,1760\nQ3 2024,1850\nQ4 2024,1940",
@@ -178,8 +217,8 @@
     "max_turns": 5
   },
   {
-    "id": "agentic-003",
-    "category": "agentic",
+    "id": "workflow-003",
+    "category": "workflow",
     "difficulty": "hard",
     "prompt": "Given the financial data below as a CSV string, write and execute Python code to screen these companies for Beneish M-Score red flags. For each company compute DSRI = (AR/Sales)_t / (AR/Sales)_t1. Flag companies where DSRI > 1.465 (Beneish threshold). Print a table of results showing company, DSRI value, and flag status.",
     "context": "company,ar_current,sales_current,ar_prior,sales_prior\nAlphatech,450,4200,380,4100\nBetasoft,890,5600,520,4800\nGammacorp,230,3100,210,3000\nDeltainc,670,4900,310,4200\nEpsilonco,180,2800,170,2700",
@@ -205,7 +244,13 @@
     "difficulty": "medium",
     "prompt": "Using the data below, compute the Incremental Return on Invested Capital (iROIC) for each year. iROIC = Change in NOPAT / Change in Invested Capital. Tax rate is 21%. Return as a dict with year keys, rounded to 4 decimal places. Return None for the base year.",
     "context": "Year | EBIT ($M) | Invested Capital ($M)\n2020 | 800       | 4,500\n2021 | 950       | 5,200\n2022 | 1,100     | 5,800\n2023 | 1,320     | 6,400\n2024 | 1,580     | 7,100",
-    "expected_output": {"2020": null, "2021": 0.1699, "2022": 0.1898, "2023": 0.2877, "2024": 0.3017},
+    "expected_output": {
+      "2020": null,
+      "2021": 0.1699,
+      "2022": 0.1898,
+      "2023": 0.2877,
+      "2024": 0.3017
+    },
     "scoring_type": "fuzzy_dict",
     "tolerance": 0.005,
     "max_turns": 3
@@ -233,8 +278,8 @@
     "max_turns": 5
   },
   {
-    "id": "agentic-004",
-    "category": "agentic",
+    "id": "workflow-004",
+    "category": "workflow",
     "difficulty": "medium",
     "prompt": "Write and execute Python code that takes the investor profile data below and generates a 3-sentence analyst-style summary for each company, then ranks them by revenue growth momentum (highest recent growth first). Print the ranked summaries.",
     "context": "company,q1_2023_rev,q2_2023_rev,q3_2023_rev,q4_2023_rev,q1_2024_rev,q2_2024_rev,q3_2024_rev,q4_2024_rev,sector\nNovaTech,450,470,495,520,560,610,670,720,Software\nMedCore,1200,1180,1220,1250,1280,1290,1310,1340,Healthcare\nGreenEnergy,380,410,445,480,510,555,595,640,Energy",
@@ -266,8 +311,8 @@
     "max_turns": 6
   },
   {
-    "id": "agentic-005",
-    "category": "agentic",
+    "id": "workflow-005",
+    "category": "workflow",
     "difficulty": "hard",
     "prompt": "Using the 10-K cash flow data below, write and execute Python code to: (1) compute CFO/Net Income ratio for each year, (2) flag years where ratio < 0.8 as potential earnings quality concerns, (3) compute trend in the ratio over time, (4) print a formatted summary table and a one-sentence conclusion about earnings quality.",
     "context": "year,net_income,cfo,revenue\n2019,850,1020,8500\n2020,920,890,8900\n2021,1100,980,10200\n2022,1350,1050,12400\n2023,1580,1180,14800\n2024,1820,1240,17200",
@@ -282,7 +327,14 @@
     "difficulty": "easy",
     "prompt": "From the balance sheet excerpt below, extract current assets, current liabilities, total assets, and total liabilities. Compute and return current ratio and debt-to-assets ratio as a JSON object with keys: current_assets, current_liabilities, total_assets, total_liabilities, current_ratio, debt_to_assets. Values in millions, ratios as floats rounded to 4 decimal places.",
     "context": "CONSOLIDATED BALANCE SHEET (in millions)\nASSETS\nCurrent assets:\n  Cash and cash equivalents: $2,340\n  Short-term investments: $1,890\n  Accounts receivable, net: $3,450\n  Inventories: $890\n  Prepaid and other: $234\nTotal current assets: $8,804\n\nNon-current assets:\n  Property, plant and equipment, net: $5,670\n  Goodwill: $3,450\n  Intangibles, net: $1,230\n  Other assets: $456\nTotal assets: $19,610\n\nLIABILITIES\nCurrent liabilities:\n  Accounts payable: $2,100\n  Accrued expenses: $1,450\n  Deferred revenue: $890\n  Current portion of debt: $450\nTotal current liabilities: $4,890\n\nLong-term debt: $4,500\nOther non-current liabilities: $890\nTotal liabilities: $10,280",
-    "expected_output": {"current_assets": 8804.0, "current_liabilities": 4890.0, "total_assets": 19610.0, "total_liabilities": 10280.0, "current_ratio": 1.8005, "debt_to_assets": 0.5242},
+    "expected_output": {
+      "current_assets": 8804.0,
+      "current_liabilities": 4890.0,
+      "total_assets": 19610.0,
+      "total_liabilities": 10280.0,
+      "current_ratio": 1.8005,
+      "debt_to_assets": 0.5242
+    },
     "scoring_type": "fuzzy_dict",
     "tolerance": 0.005,
     "max_turns": 3
@@ -308,5 +360,156 @@
     "scoring_type": "fuzzy_number",
     "tolerance": 0.001,
     "max_turns": 3
+  },
+  {
+    "id": "agentic-001",
+    "category": "agentic",
+    "difficulty": "medium",
+    "prompt": "You're supporting an analyst who has one question: of Helios Corp's three product lines, which one should we be most worried about heading into 2025 - and why? The data you need is in the files available to you, but treat them as a starting point, not the final word. There is no fixed procedure: decide what to look at, resolve any data-quality issues you run into, and finish with a short, evidence-backed recommendation that names the single product line of greatest concern.",
+    "context": null,
+    "expected_output": null,
+    "scoring_type": "llm_judge",
+    "rubric": "Score 4 if: the code investigates the files, heeds the note that a 2024 figure was restated, and uses fetch_filing('Helios Corp','2024') to retrieve the Line C Q3/Q4 2024 restatements (910->700, 980->650), applies the restated figures, and concludes Line C is the product line of greatest concern - backing it with the post-restatement decline (2024 trending ~820->650, roughly -23% YoY in Q4) and flagging the channel-stuffing reversal as a revenue-quality red flag, while correctly characterizing Line A as the healthy grower (~+17% YoY) and Line B as a mild decliner. Score 3 if it fetches and applies the restatement and names Line C, but with a minor calc error or without flagging the revenue-quality issue. Score 2 if it never calls fetch_filing and so relies on the un-restated figures - typically concluding Line C is the strongest line (the trap) or naming the wrong line. Score 1 if the approach is sound but it produces no usable recommendation. Score 0 if no code runs or it crashes.",
+    "max_turns": 8,
+    "tools_data": {
+      "files": {
+        "product_revenue.csv": "product_line,quarter,revenue\nLine A,Q1 2023,400\nLine A,Q2 2023,420\nLine A,Q3 2023,440\nLine A,Q4 2023,460\nLine A,Q1 2024,480\nLine A,Q2 2024,500\nLine A,Q3 2024,520\nLine A,Q4 2024,540\nLine B,Q1 2023,700\nLine B,Q2 2023,690\nLine B,Q3 2023,680\nLine B,Q4 2023,670\nLine B,Q1 2024,660\nLine B,Q2 2024,650\nLine B,Q3 2024,640\nLine B,Q4 2024,630\nLine C,Q1 2023,900\nLine C,Q2 2023,880\nLine C,Q3 2023,860\nLine C,Q4 2023,840\nLine C,Q1 2024,820\nLine C,Q2 2024,800\nLine C,Q3 2024,910\nLine C,Q4 2024,980\n",
+        "README.txt": "Helios Corp - internal product-line revenue extract.\nAll figures are quarterly net revenue in USD thousands ($000s), pulled from the data warehouse.\nNOTE: at least one 2024 quarter was restated after this extract was taken. Verify the current\n2024 figures with the filing service (fetch_filing) before drawing any conclusions.\n"
+      },
+      "filings": {
+        "Helios Corp": {
+          "2024": {
+            "restatements": [
+              {
+                "product_line": "Line C",
+                "quarter": "Q3 2024",
+                "reported": 910,
+                "restated": 700
+              },
+              {
+                "product_line": "Line C",
+                "quarter": "Q4 2024",
+                "reported": 980,
+                "restated": 650
+              }
+            ],
+            "note": "Line C Q3-Q4 2024 revenue restated downward after reversing channel-stuffed shipments (product pushed to distributors that was later returned). Use the restated figures as final; the reversal is a revenue-recognition red flag."
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "agentic-002",
+    "category": "agentic",
+    "difficulty": "hard",
+    "prompt": "A junior analyst tells your PM that Orion Inc's FY2024 revenue is 'about $1.4M', but the PM wants it checked against the source data before it goes in the memo. Using whatever data you can find for Orion, work out Orion's actual FY2024 revenue, flag any data problems you had to deal with along the way, and state clearly whether the $1.4M figure holds up. Decide your own approach.",
+    "context": null,
+    "expected_output": null,
+    "scoring_type": "llm_judge",
+    "rubric": "Score 4 if: the code reads the quarterly file, recognizes Q4 2024 is missing and retrieves it via fetch_filing('Orion Inc','2024') (=402, $000s), de-duplicates the repeated Q2 2024 row (does not double-count it), reconciles units (the file is in $000s, the estimate in $M), computes FY2024 ~ $1.40M ($1,397k), and correctly concludes the analyst's ~$1.4M estimate is supported. Score 3 if it reaches ~$1.4M and the right conclusion but does not explicitly flag both the duplicate row and the unit reconciliation. Score 2 if it double-counts the duplicate Q2 row (FY ~ $1.73M) or never fetches the missing Q4, and so reports a wrong figure or wrongly rejects the estimate. Score 1 if the approach is sound but yields no clean answer. Score 0 if no code runs.",
+    "max_turns": 8,
+    "tools_data": {
+      "files": {
+        "quarterly_actuals.csv": "quarter,revenue_usd_000s\nQ1 2024,310\nQ2 2024,330\nQ2 2024,330\nQ3 2024,355\n",
+        "analyst_note.txt": "From the junior analyst: \"My model puts Orion Inc's FY2024 revenue at about $1.4M. Can you confirm it against the actuals?\"\n(Quarterly actuals are attached. Heads up: the export tool has been known to duplicate rows, and the latest quarter may not have landed in the file yet.)\n"
+      },
+      "filings": {
+        "Orion Inc": {
+          "2024": {
+            "Q4_revenue_usd_000s": 402,
+            "note": "Q4 2024 actual net revenue = 402 ($000s)."
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "agentic-003",
+    "category": "agentic",
+    "difficulty": "hard",
+    "prompt": "A lender holds debt across five portfolio companies and is worried about a loan covenant that trips when net debt exceeds 3.0x EBITDA. For FY2024, work out which borrowers (if any) are at risk of breaching it. The portfolio file is incomplete - fill any gaps from the filing service - and call out anything that makes a borrower's reported leverage look better than it really is. Report the at-risk borrowers with your reasoning.",
+    "context": null,
+    "expected_output": null,
+    "scoring_type": "llm_judge",
+    "rubric": "Score 4 if: the code computes net-debt/EBITDA for all five companies, recognizes that EBITDA is missing for Borealis Energy and Drake Pharma and retrieves exactly those via fetch_filing(..., '2024'), flags Borealis (910/260 = 3.5x) and Drake (600/150 = 4.0x) as covenant breaches while clearing Acme (2.3x), Cobalt (1.6x) and Everest (2.0x), and notes that Borealis's reported EBITDA is flattered by a $40m one-off gain so its underlying leverage is worse (~4.1x). Score 3 if it identifies the correct at-risk set {Borealis, Drake} but misses the one-off nuance or has a minor calc error. Score 2 if it fails to fetch the missing EBITDAs or reports the wrong at-risk set (e.g. misses Drake, or over-flags a clear borrower). Score 1 if the approach is sound but yields no clean result. Score 0 if no code runs.",
+    "max_turns": 8,
+    "tools_data": {
+      "files": {
+        "portfolio.csv": "company,net_debt_usd_m,ebitda_2024_usd_m\nAcme Industrials,420,180\nBorealis Energy,910,\nCobalt Logistics,150,95\nDrake Pharma,600,\nEverest Foods,275,140\n"
+      },
+      "filings": {
+        "Borealis Energy": {
+          "2024": {
+            "ebitda_usd_m": 260,
+            "note": "FY2024 EBITDA includes a $40m one-off insurance settlement gain; underlying EBITDA ~ 220."
+          }
+        },
+        "Drake Pharma": {
+          "2024": {
+            "ebitda_usd_m": 150
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "agentic-004",
+    "category": "agentic",
+    "difficulty": "medium",
+    "prompt": "From the companies in the data available to you, identify the single best 'quality compounder' - a business that pairs durable revenue growth with healthy conversion of profit into cash. There is no prescribed metric set: define your own screen, gather whatever you need to apply it, compute it, and justify your pick (and why you rejected the runners-up).",
+    "context": null,
+    "expected_output": null,
+    "scoring_type": "llm_judge",
+    "rubric": "Score 4 if: the code defines a sensible screen combining revenue growth and cash conversion, computes growth from the fundamentals file, recognizes that operating cash flow is NOT in the file and retrieves it via fetch_filing(..., '2024') to compute CFO/Net-Income, and selects Aster Health (~+15%/yr revenue growth with CFO/NI ~ 1.06) - explicitly rejecting Brightwave Tech despite its faster top-line growth (~+30%/yr) because its cash conversion is poor (CFO/NI ~ 0.47, a revenue-quality red flag), and rejecting Cedar Foods as too slow-growing (~+4%/yr). Score 3 if it picks Aster and fetches CFO but with thin justification or without explicitly flagging Brightwave's weak conversion. Score 2 if it never fetches cash-flow data (judging on growth alone) and so picks Brightwave (the trap), or picks the wrong company. Score 1 if the approach is sound but yields no clear pick. Score 0 if no code runs.",
+    "max_turns": 8,
+    "tools_data": {
+      "files": {
+        "fundamentals.csv": "company,year,revenue_usd_m,net_income_usd_m\nAster Health,2022,1000,120\nAster Health,2023,1150,140\nAster Health,2024,1320,165\nBrightwave Tech,2022,800,60\nBrightwave Tech,2023,1040,95\nBrightwave Tech,2024,1350,150\nCedar Foods,2022,2000,180\nCedar Foods,2023,2080,188\nCedar Foods,2024,2160,196\n"
+      },
+      "filings": {
+        "Aster Health": {
+          "2024": {
+            "cfo_usd_m": 175
+          }
+        },
+        "Brightwave Tech": {
+          "2024": {
+            "cfo_usd_m": 70,
+            "note": "Operating cash flow held back by a large rise in receivables and capitalized contract costs."
+          }
+        },
+        "Cedar Foods": {
+          "2024": {
+            "cfo_usd_m": 205
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "agentic-005",
+    "category": "agentic",
+    "difficulty": "hard",
+    "prompt": "Something looks wrong in Vertex Manufacturing's reported quarterly gross margins. Investigate the data you've been given, pin down the anomaly, decide whether it's a data error or a genuine business event, handle it appropriately, and then state Vertex's underlying gross-margin trend across the period. Explain how you handled the anomaly.",
+    "context": null,
+    "expected_output": null,
+    "scoring_type": "llm_judge",
+    "rubric": "Score 4 if: the code computes gross margin per quarter, detects the Q2 2024 anomaly (COGS of 1740 implies an impossible ~ -190% gross margin), judges it a data/migration error rather than a real event (consistent with the changelog note), retrieves the corrected figure via fetch_filing('Vertex Manufacturing','2024') (Q2 COGS = 348), recomputes, and reports the underlying trend: gross margin rising steadily from ~40% in 2023 to ~45% by Q4 2024 (corrected Q2 2024 ~ 42%). Score 3 if it detects the anomaly and corrects it via the filing but describes the trend only vaguely, or simply drops the bad quarter instead of using the fetched value. Score 2 if it treats the -190% margin as real (no correction) and reports a distorted trend, or never investigates the anomaly. Score 1 if the approach is sound but yields no clean result. Score 0 if no code runs.",
+    "max_turns": 8,
+    "tools_data": {
+      "files": {
+        "income_statement.csv": "quarter,revenue_usd_m,cogs_usd_m\nQ1 2023,500,300\nQ2 2023,520,308\nQ3 2023,540,313\nQ4 2023,560,322\nQ1 2024,580,330\nQ2 2024,600,1740\nQ3 2024,640,358\nQ4 2024,660,360\n",
+        "changelog.txt": "Data note: the 2023 quarters came from the audited financials. The 2024 quarters were migrated from a legacy ERP during a system cutover; a few values may carry formatting/transcription issues from that migration.\n"
+      },
+      "filings": {
+        "Vertex Manufacturing": {
+          "2024": {
+            "Q2_cogs_usd_m": 348,
+            "note": "Correct Q2 2024 COGS = 348 ($M). The 1740 in the migrated extract was a transcription error (duplicated digits)."
+          }
+        }
+      }
+    }
   }
 ]

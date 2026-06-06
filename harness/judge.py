@@ -108,7 +108,9 @@ def build_judge_response(result: dict) -> str:
                 out = str(b.get("result", "")).strip()
                 if len(out) > MAX_TOOL_OUTPUT_CHARS:
                     out = out[:MAX_TOOL_OUTPUT_CHARS] + "\n…[output truncated]…"
-                parts.append(f"[execution output]\n{out}")
+                name = b.get("name") or ""
+                label = "execution output" if name in ("", "execute_python") else f"{name} result"
+                parts.append(f"[{label}]\n{out}")
 
     body = "\n\n".join(parts)
     # The final answer is the last end_turn text, already included above; add it
