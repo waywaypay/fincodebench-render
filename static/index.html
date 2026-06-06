@@ -1011,13 +1011,34 @@ async function loadRun(id){
   if(rep) renderReport(rep, body);
   else body.innerHTML='<div class="empty">Could not load run details.</div>';
 }
-function renderReport(rep, body=$('#resultsBody')){
+function renderReport(rep, body=$('#resultsBody'), filterCategory=null){
   body.innerHTML='';
-  const ov=rep.overall||{}; const cost=rep.cost_usd||{}; const lat=rep.latency_seconds||{};
+  const cost=rep.cost_usd||{}; const lat=rep.latency_seconds||{};
   const modelLabel=rep.model?(rep.provider?`${rep.provider} · ${rep.model}`:rep.model):'—';
+
+  // When scoped to a single category, derive stats from that slice only
+  let ov, taskScores, byDiff, totalCost, totalLat, meanLat;
+  if(filterCategory && rep.by_category && rep.by_category[filterCategory]){
+    const cs=rep.by_category[filterCategory];
+    ov={mean_score:cs.mean, pass_rate_75:cs.pass_rate};
+    taskScores=(rep.task_scores||[]).filter(t=>t.category===filterCategory);
+    totalCost=taskScores.reduce((s,t)=>s+(t.cost||0),0);
+    totalLat=taskScores.reduce((s,t)=>s+(t.elapsed||0),0);
+    meanLat=taskScores.length?totalLat/taskScores.length:null;
+    const dm={};
+    taskScores.forEach(t=>{if(!t.difficulty)return;const d=dm[t.difficulty]=dm[t.difficulty]||{sum:0,p75:0,n:0};d.n++;if(t.score!=null)d.sum+=t.score;if((t.score||0)>=0.75)d.p75++;});
+    byDiff=Object.fromEntries(Object.entries(dm).map(([k,v])=>[k,{mean:v.n?v.sum/v.n:0,n:v.n,pass_rate:v.n?v.p75/v.n:0}]));
+  } else {
+    ov=rep.overall||{};
+    taskScores=rep.task_scores||[];
+    byDiff=rep.by_difficulty||{};
+    totalCost=cost.total; totalLat=lat.total; meanLat=lat.mean;
+  }
+  const nTasks=filterCategory?taskScores.length:(rep.n_tasks??'—');
+
   const stats=[['Mean score',pct(ov.mean_score)],['pass@0.75',pct(ov.pass_rate_75)],
-    ['Tasks',rep.n_tasks??'—'],['Model',modelLabel],
-    ['Total cost',fmtCost(cost.total)],['Total latency',fmtDuration(lat.total)]];
+    ['Tasks',nTasks],['Model',modelLabel],
+    ['Total cost',fmtCost(totalCost)],['Total latency',fmtDuration(totalLat)]];
   const sg=el('div','grid cols-3'); stats.forEach(([l,v])=>{
     const sm=String(v).length>9?' sm':'';
     const c=el('div','card');c.innerHTML=`<div class="statbig${sm}">${esc(v)}</div><div class="statlabel">${l}</div>`;sg.append(c);});
@@ -1027,16 +1048,18 @@ function renderReport(rep, body=$('#resultsBody')){
   const bits=[];
   if(rep.model) bits.push(`Runner <b>${esc(rep.model)}</b>`);
   if(rep.judge_model) bits.push(`Judge <b>${esc(rep.judge_model)}</b>`);
-  if(cost.total!=null) bits.push(`cost = runner ${fmtCost(cost.runner)} + judge ${fmtCost(cost.judge)}`);
-  if(lat.mean!=null) bits.push(`mean ${fmtDuration(lat.mean)}/task`);
+  if(totalCost!=null) bits.push(`cost = runner ${fmtCost(cost.runner)} + judge ${fmtCost(cost.judge)}`);
+  if(meanLat!=null) bits.push(`mean ${fmtDuration(meanLat)}/task`);
   if(bits.length) body.append(el('p','note',bits.join(' · ')));
 
-  // mean by category
-  const catItems=Object.entries(rep.by_category||{}).map(([k,v])=>({label:k,value:v.mean,n:v.n,color:STATE.catColors[k]}));
-  body.append(chartCard('Mean score by category', catItems));
+  // mean by category — omit when already scoped to one category
+  if(!filterCategory){
+    const catItems=Object.entries(rep.by_category||{}).map(([k,v])=>({label:k,value:v.mean,n:v.n,color:STATE.catColors[k]}));
+    body.append(chartCard('Mean score by category', catItems));
+  }
   // mean by difficulty
   const order={easy:0,medium:1,hard:2};
-  const diffItems=Object.entries(rep.by_difficulty||{}).sort((a,b)=>order[a[0]]-order[b[0]])
+  const diffItems=Object.entries(byDiff).sort((a,b)=>order[a[0]]-order[b[0]])
     .map(([k,v])=>({label:k,value:v.mean,n:v.n,color:scoreColor(v.mean)}));
   body.append(chartCard('Mean score by difficulty', diffItems));
 
@@ -1047,7 +1070,7 @@ function renderReport(rep, body=$('#resultsBody')){
     '<span style="color:var(--amber)">■ 50–75%</span> '+
     '<span style="color:var(--red)">■ &lt;50%</span> '+
     '<span style="color:var(--gray)">■ unscored</span>'));
-  const byCat={}; (rep.task_scores||[]).forEach(t=>{(byCat[t.category]=byCat[t.category]||[]).push(t);});
+  const byCat={}; taskScores.forEach(t=>{(byCat[t.category]=byCat[t.category]||[]).push(t);});
   ['extraction','code_generation','computation','workflow','agentic','agentic_real','debug'].filter(c=>byCat[c]).forEach(c=>{
     const g=el('div','heatgroup'); g.append(el('div','gl',c));
     const row=el('div','heat');
@@ -1064,7 +1087,7 @@ function renderReport(rep, body=$('#resultsBody')){
 
   // detailed table — each row drills into the task modal (prompt + output + expected)
   const tcard=el('div','card');
-  const rows=(rep.task_scores||[]).slice().sort((a,b)=>(a.score??-1)-(b.score??-1));
+  const rows=taskScores.slice().sort((a,b)=>(a.score??-1)-(b.score??-1));
   tcard.innerHTML='<h3>Per-task detail</h3>'+
     '<p class="note">Click any task to open its prompt, the model output, and the expected output.</p>'+
     '<table class="tasks-table"><thead><tr><th>Task</th><th>Category</th><th>Diff</th><th>Method</th><th>Turns</th><th>Latency</th><th>Cost</th><th style="width:150px">Score</th></tr></thead><tbody>'+
@@ -1419,7 +1442,7 @@ async function selectCategoryRun(id){
   const body=$('#catResultsBody'); if(!body) return;
   body.innerHTML='<div class="empty">Loading…</div>';
   const rep=await fetchReport(id);
-  if(rep) renderReport(rep, body);
+  if(rep) renderReport(rep, body, STATE.activeCategory);
   else body.innerHTML='<div class="empty">Could not load run details.</div>';
 }
 
