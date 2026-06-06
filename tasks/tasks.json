@@ -131,12 +131,12 @@
     "prompt": "Compute the unlevered free cash flow for each year from the data below. UFCF = EBIT * (1 - tax_rate) + D&A - CapEx - Change in Working Capital. Return as a dict with year keys and UFCF values in millions, rounded to 2 decimal places.",
     "context": "Year  | EBIT ($M) | D&A ($M) | CapEx ($M) | Delta WC ($M) | Tax Rate\n2021  | 1,200     | 340      | 450        | 85            | 21%\n2022  | 1,450     | 365      | 510        | 120           | 21%\n2023  | 1,680     | 390      | 480        | 95            | 21%",
     "expected_output": {
-      "2021": 1153.0,
-      "2022": 1380.5,
-      "2023": 1615.2
+      "2021": 753.0,
+      "2022": 880.5,
+      "2023": 1142.2
     },
     "scoring_type": "fuzzy_dict",
-    "tolerance": 1.0,
+    "tolerance_abs": 1.0,
     "max_turns": 3
   },
   {
@@ -145,7 +145,7 @@
     "difficulty": "hard",
     "prompt": "Using the data below, compute the Altman Z-Score for this company. Z = 1.2*X1 + 1.4*X2 + 3.3*X3 + 0.6*X4 + 1.0*X5, where X1=Working Capital/Total Assets, X2=Retained Earnings/Total Assets, X3=EBIT/Total Assets, X4=Market Cap/Total Liabilities, X5=Revenue/Total Assets. Return the Z-score rounded to 3 decimal places.",
     "context": "Current Assets: $2,450M\nCurrent Liabilities: $1,230M\nTotal Assets: $8,900M\nRetained Earnings: $3,200M\nEBIT: $1,100M\nMarket Capitalization: $12,500M\nTotal Liabilities: $4,200M\nRevenue: $9,800M",
-    "expected_output": 3.456,
+    "expected_output": 3.963,
     "scoring_type": "fuzzy_number",
     "tolerance": 0.01,
     "max_turns": 3
@@ -191,7 +191,7 @@
     "context": "import numpy as np\n\ndef walk_forward_backtest(revenues: list, train_window: int = 4) -> list:\n    results = []\n    # Bug: range is wrong - should go from train_window to len(revenues)\n    for i in range(len(revenues)):\n        train = revenues[i:i+train_window]\n        if len(train) < train_window:\n            continue\n        # Bug: actual should be revenues[i+train_window]\n        actual = revenues[i]\n        \n        x = np.arange(len(train))\n        # Bug: should use np.polyfit, not np.linalg.solve\n        coeffs = np.linalg.solve(x, train)\n        slope, intercept = coeffs[0], coeffs[1] if len(coeffs) > 1 else 0\n        \n        # Bug: prediction index should be train_window, not train_window+1\n        predicted = slope * (train_window + 1) + intercept\n        results.append((actual, predicted))\n    \n    return results",
     "expected_output": null,
     "scoring_type": "functional",
-    "test_code": "revenues = [100, 110, 120, 130, 145, 158, 172, 185]\nresults = walk_forward_backtest(revenues, train_window=4)\nassert len(results) == 4, f'Expected 4 results, got {len(results)}'\nassert results[0][0] == 145, f'First actual should be 145, got {results[0][0]}'\nassert results[1][0] == 158, f'Second actual should be 158, got {results[1][0]}'\nprint('PASS')",
+    "test_code": "revenues = [100, 110, 120, 130, 145, 158, 172, 185]\nresults = walk_forward_backtest(revenues, train_window=4)\nassert len(results) == 4, f'Expected 4 results, got {len(results)}'\nactuals = [r[0] for r in results]\nassert actuals == [145, 158, 172, 185], f'Actuals wrong: {actuals}'\npreds = [r[1] for r in results]\nexpected_preds = [140.0, 155.0, 170.5, 186.0]\nfor got, exp in zip(preds, expected_preds):\n    assert abs(got - exp) < 1.0, f'Prediction {got} not within 1.0 of expected {exp}'\nassert all(b > a for a, b in zip(preds, preds[1:])), f'Predictions should increase with the trend: {preds}'\nprint('PASS')",
     "max_turns": 8
   },
   {
@@ -246,10 +246,10 @@
     "context": "Year | EBIT ($M) | Invested Capital ($M)\n2020 | 800       | 4,500\n2021 | 950       | 5,200\n2022 | 1,100     | 5,800\n2023 | 1,320     | 6,400\n2024 | 1,580     | 7,100",
     "expected_output": {
       "2020": null,
-      "2021": 0.1699,
-      "2022": 0.1898,
-      "2023": 0.2877,
-      "2024": 0.3017
+      "2021": 0.1693,
+      "2022": 0.1975,
+      "2023": 0.2897,
+      "2024": 0.2934
     },
     "scoring_type": "fuzzy_dict",
     "tolerance": 0.005,
@@ -356,7 +356,7 @@
     "difficulty": "hard",
     "prompt": "Compute the weighted average cost of capital (WACC) using the data below. WACC = (E/V)*Re + (D/V)*Rd*(1-T), where E=equity value, D=debt value, V=E+D, Re=cost of equity (use CAPM: Rf + Beta*(Rm-Rf)), Rd=cost of debt, T=tax rate. Return as a float rounded to 6 decimal places.",
     "context": "Market Cap (E): $15,400M\nTotal Debt (D): $4,200M\nRisk-Free Rate (Rf): 4.2%\nBeta: 1.35\nMarket Risk Premium (Rm-Rf): 5.5%\nCost of Debt (Rd): 6.8%\nTax Rate (T): 21%",
-    "expected_output": 0.105063,
+    "expected_output": 0.102851,
     "scoring_type": "fuzzy_number",
     "tolerance": 0.001,
     "max_turns": 3
