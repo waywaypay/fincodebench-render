@@ -248,7 +248,7 @@
     opacity:0;pointer-events:none;transition:opacity .18s ease}
   .modal-overlay.open{opacity:1;pointer-events:auto}
   .modal{background:var(--card);border:1px solid var(--border);border-radius:16px;
-    box-shadow:0 26px 64px -26px rgba(28,27,24,.42);width:min(720px,100%);margin:auto;
+    box-shadow:0 26px 64px -26px rgba(28,27,24,.42);width:min(820px,100%);margin:auto;
     transform:translateY(8px) scale(.99);transition:transform .18s ease}
   .modal-overlay.open .modal{transform:none}
   .modal-head{display:flex;align-items:flex-start;gap:12px;padding:20px 24px 16px;
@@ -277,6 +277,12 @@
     color:var(--text);white-space:pre-wrap;word-break:break-word;max-height:360px;overflow:auto}
   .modal pre.err{color:var(--red);border-color:#e3c9c4;background:#faf2f0}
   .modal .muted-note{color:var(--muted);font-size:13.5px}
+  /* output-vs-expected two-column compare; stacks on narrow screens */
+  .modal .cmp{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start}
+  .modal .cmp>div{min-width:0}
+  .modal .cmp-h{font:600 11px/1 var(--sans);letter-spacing:.08em;text-transform:uppercase;
+    color:var(--muted);margin-bottom:8px}
+  @media(max-width:640px){.modal .cmp{grid-template-columns:1fr}}
 
   /* runs table — clickable list of all runs */
   .runs-card{padding:0;overflow:hidden}
@@ -286,6 +292,12 @@
   .runs-table tbody tr{transition:background .12s ease}
   .run-row.clickable{cursor:pointer}
   .run-row.clickable:hover{background:var(--tint)}
+  /* per-task detail table — rows drill into the task modal */
+  .tasks-table tbody tr{transition:background .12s ease}
+  .tasks-table tbody tr.clickable{cursor:pointer}
+  .tasks-table tbody tr.clickable:hover{background:var(--tint)}
+  .tasks-table tbody tr.clickable:focus-visible{outline:none;background:var(--tint);
+    box-shadow:inset 3px 0 0 var(--ink)}
   .run-row.active{background:var(--panel)}
   .run-row.active td:first-child{box-shadow:inset 3px 0 0 var(--ink)}
   /* the open run is collapsible — a chevron on its row signals expand/collapse */
@@ -1034,10 +1046,12 @@ function renderReport(rep, body=$('#resultsBody')){
   });
   body.append(heat);
 
-  // detailed table
+  // detailed table — each row drills into the task modal (prompt + output + expected)
   const tcard=el('div','card');
   const rows=(rep.task_scores||[]).slice().sort((a,b)=>(a.score??-1)-(b.score??-1));
-  tcard.innerHTML='<table><thead><tr><th>Task</th><th>Category</th><th>Diff</th><th>Method</th><th>Turns</th><th>Latency</th><th>Cost</th><th style="width:150px">Score</th></tr></thead><tbody>'+
+  tcard.innerHTML='<h3>Per-task detail</h3>'+
+    '<p class="note">Click any task to open its prompt, the model output, and the expected output.</p>'+
+    '<table class="tasks-table"><thead><tr><th>Task</th><th>Category</th><th>Diff</th><th>Method</th><th>Turns</th><th>Latency</th><th>Cost</th><th style="width:150px">Score</th></tr></thead><tbody>'+
     rows.map(t=>`<tr>
       <td class="mono">${esc(t.task_id)}</td>
       <td><span class="badge cat cat-${esc(t.category)}">${esc(t.category)}</span></td>
@@ -1048,6 +1062,18 @@ function renderReport(rep, body=$('#resultsBody')){
       <td class="mono">${fmtCost(t.cost)}</td>
       <td><span class="scorebar"><i style="width:${t.score!=null?Math.round(t.score*100):0}%;background:${scoreColor(t.score)}"></i></span>${pct(t.score)}</td>
     </tr>`).join('')+'</tbody></table>';
+  // Rows render in the same order as `rows`, so index-match each <tr> to its task
+  // score and open the drill-in modal on click (or keyboard) — same view the
+  // heatmap cells use.
+  tcard.querySelectorAll('tbody tr').forEach((tr,i)=>{
+    const ts=rows[i]; if(!ts) return;
+    tr.classList.add('clickable');
+    tr.tabIndex=0; tr.setAttribute('role','button');
+    tr.setAttribute('aria-label', ts.task_id+' — open prompt, output and expected output');
+    tr.title=ts.task_id+' — prompt, output & expected output';
+    tr.onclick=()=>openTaskModal(ts);
+    tr.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openTaskModal(ts);}};
+  });
   body.append(tcard);
 }
 function chartCard(title, items){
@@ -1091,6 +1117,18 @@ function closeTaskModal(){
   document.removeEventListener('keydown',_taskModalKey);
   if(_taskModalTrigger&&_taskModalTrigger.focus) _taskModalTrigger.focus();
 }
+// The scoring target a task's output is compared against, labelled by scoring
+// type: the expected JSON for exact/fuzzy methods, the unit-test suite for
+// functional, the rubric for llm_judge. Pulled from the public task definition
+// and shown beside the model's output in the drill-in modal.
+function expectedTarget(task){
+  const st=task&&task.scoring_type;
+  if(st==='functional') return {label:'Expected · unit tests', html:`<pre>${esc(task.test_code||'')}</pre>`};
+  if(st==='llm_judge')  return {label:'Target · scoring rubric', html:`<div class="prose">${esc(task.rubric||'')}</div>`};
+  if(task&&task.expected_output!=null)
+    return {label:'Expected output', html:`<pre>${esc(JSON.stringify(task.expected_output,null,2))}</pre>`};
+  return {label:'Expected output', html:'<p class="muted-note">—</p>'};
+}
 function openTaskModal(t){
   const ov=ensureTaskModal();
   _taskModalTrigger=document.activeElement;
@@ -1122,12 +1160,18 @@ function openTaskModal(t){
     if(task.tools_data) h+=toolsDataHtml(task);
     h+=`</div>`;
   }
-  // Output (the agent's final response, carried on the report's task_scores)
-  h+=`<div class="modal-section"><div class="modal-label">Output</div>`;
+  // Output vs expected — the agent's final response (from the report's
+  // task_scores) next to the scoring target (from the public task definition).
+  const exp=expectedTarget(task);
+  h+=`<div class="modal-section"><div class="modal-label">Output vs expected</div>
+    <div class="cmp">
+      <div><div class="cmp-h">Model output</div>`;
   if(out) h+=`<pre>${esc(out)}</pre>`;
   else if(!t.error) h+=`<p class="muted-note">No model output recorded for this run.</p>`;
   if(t.error) h+=`<pre class="err"${out?' style="margin-top:10px"':''}>${esc(t.error)}</pre>`;
-  h+=`</div>`;
+  h+=`</div>
+      <div><div class="cmp-h">${esc(exp.label)}</div>${exp.html}</div>
+    </div></div>`;
 
   ov.querySelector('.modal-body').innerHTML=h;
   ov.classList.add('open');
