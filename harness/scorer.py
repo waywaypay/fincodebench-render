@@ -175,11 +175,41 @@ def score_functional(response: str, test_code: str) -> dict:
     return {"score": 0.0, "method": "functional", "error": last_error}
 
 
+# ── Diagnostic bridge ─────────────────────────────────────────────────────────
+def _attach_failure_diagnosis(task: dict, response: str, score_result: dict) -> None:
+    """On a functional failure, ask the diagnostic judge WHY it failed and attach
+    the verdict under `diagnostic_judge_result`. Never changes the score. The
+    import is lazy to avoid a scorer<->judge import cycle, and any failure here is
+    swallowed so diagnosis can never break scoring."""
+    try:
+        from judge import diagnostic_failure_judge
+    except Exception:
+        return
+    # Show the judge the full submission, not just the first fence: a model often
+    # splits imports and the function across separate code blocks.
+    blocks = _extract_code_blocks(response)
+    model_code = "\n\n".join(blocks) if blocks else response[:3000]
+    try:
+        score_result["diagnostic_judge_result"] = diagnostic_failure_judge(
+            task_prompt=task.get("prompt", ""),
+            model_code=model_code,
+            test_code=task.get("test_code", ""),
+            error_output=score_result.get("error") or score_result.get("stdout") or "",
+        )
+    except Exception:
+        pass
+
+
 # ── Dispatcher ────────────────────────────────────────────────────────────────
-def score_task(task: dict, result: dict) -> dict:
+def score_task(task: dict, result: dict, run_diagnostic: bool = False) -> dict:
     """
     Route to the appropriate scorer based on task['scoring_type'].
     LLM-judge tasks return {"score": None, "method": "llm_judge_pending"}.
+
+    When `run_diagnostic` is True, a failing functional task (score 0) is sent to
+    the diagnostic judge, which classifies *why* it failed (wrong_formula,
+    signature_mismatch, edge_case, …) without altering the score. Off by default
+    so normal runs incur no extra cost or latency.
     """
     scoring_type = task.get("scoring_type", "llm_judge")
     response = result.get("final_response", "")
@@ -208,7 +238,10 @@ def score_task(task: dict, result: dict) -> dict:
         )
 
     elif scoring_type == "functional":
-        return score_functional(response, task["test_code"])
+        score_result = score_functional(response, task["test_code"])
+        if run_diagnostic and score_result.get("score", 1.0) == 0.0:
+            _attach_failure_diagnosis(task, response, score_result)
+        return score_result
 
     elif scoring_type == "llm_judge":
         # Deferred — call judge.py separately

@@ -4,6 +4,7 @@ Runs the full benchmark: execute → score → judge → report.
 """
 
 import json
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -15,6 +16,37 @@ from judge import score_pending_judge_tasks
 
 RESULTS_DIR = Path("results")
 TASKS_FILE = Path("tasks/tasks.json")
+
+# Bumped whenever tasks or scoring semantics change, so runs recorded under an
+# older methodology are never silently compared against newer ones. Surfaced in
+# the report as `benchmark_version`. 1.2.0: scoring-comparability work + the
+# agentic_real expansion from 3 to 8 synthetic two-filing tasks.
+BENCHMARK_VERSION = "1.2.0"
+
+
+def _diagnostic_enabled() -> bool:
+    """Opt-in failure diagnosis on functional tasks (extra judge calls on
+    failures only). Enable with FINCODEBENCH_DIAGNOSTIC_JUDGE=1."""
+    return os.environ.get("FINCODEBENCH_DIAGNOSTIC_JUDGE", "").lower() in ("1", "true", "yes")
+
+
+# Scoring methods fall into two granularities. BINARY methods can only ever score
+# 0 or 1, so a category mean built from them is really a pass rate. PARTIAL_CREDIT
+# methods yield continuous 0–1 scores. Averaging across the two scales — or
+# comparing a binary category's mean against a partial-credit one — overstates
+# differences, which is exactly why code_generation (all-binary) looks far weaker
+# than agentic (partial-credit) even at similar capability. The report flags this
+# rather than hiding it.
+_BINARY_METHODS = {"functional", "fuzzy_number", "exact_json"}
+_PARTIAL_CREDIT_METHODS = {"fuzzy_dict", "llm_judge"}
+
+
+def _scale_of(method: str) -> str:
+    if method in _BINARY_METHODS:
+        return "binary"
+    if method in _PARTIAL_CREDIT_METHODS:
+        return "partial_credit"
+    return "unknown"
 
 
 def load_tasks() -> dict:
@@ -51,12 +83,13 @@ def run_full_eval(
     print("\n" + "="*60)
     print("STEP 2: Scoring deterministic tasks")
     print("="*60)
+    run_diag = _diagnostic_enabled()
     for result in results:
         task = tasks.get(result["task_id"])
         if not task:
             continue
         if task.get("scoring_type") != "llm_judge":
-            score_result = score_task(task, result)
+            score_result = score_task(task, result, run_diagnostic=run_diag)
             result["score_result"] = score_result
             status = "✓" if score_result.get("score", 0) == 1.0 else "✗"
             print(f"  {status} {result['task_id']:25s} score={score_result.get('score')}")
@@ -90,6 +123,8 @@ def generate_report(results: list, tasks: dict) -> dict:
 
     by_category = {}
     by_difficulty = {}
+    by_category_methods = {}   # {cat: {method: count}} — which scales a category mixes
+    functional_failures = {}   # {failure_type: count} — from the diagnostic judge
     all_scores = []
     task_scores = []
 
@@ -126,11 +161,22 @@ def generate_report(results: list, tasks: dict) -> dict:
 
         by_category.setdefault(cat, [])
         by_difficulty.setdefault(diff, [])
+        by_category_methods.setdefault(cat, {})
 
         if normalized is not None:
             by_category[cat].append(normalized)
             by_difficulty[diff].append(normalized)
             all_scores.append(normalized)
+            by_category_methods[cat][method] = by_category_methods[cat].get(method, 0) + 1
+
+        # Tally why functional tasks failed, when the diagnostic judge ran. This
+        # turns the per-task diagnoses into a category-agnostic failure profile
+        # (e.g. "4 of 6 codegen failures were signature_mismatch" → benchmark bug,
+        # not model weakness).
+        diag = sr.get("diagnostic_judge_result")
+        if diag and diag.get("failure_type"):
+            ft = diag["failure_type"]
+            functional_failures[ft] = functional_failures.get(ft, 0) + 1
 
         # ── cost (runner + judge) and latency ────────────────────────────────
         model = result.get("model")
@@ -179,15 +225,57 @@ def generate_report(results: list, tasks: dict) -> dict:
     def avg(lst): return round(sum(lst) / len(lst), 4) if lst else None
     def pass_rate(lst, threshold=0.75): return round(sum(1 for x in lst if x >= threshold) / len(lst), 4) if lst else None
 
+    def _category_methods(cat):
+        """Per-category scoring-method breakdown + a flag for when one category
+        mixes binary and partial-credit tasks (its mean then blends two scales)."""
+        methods = by_category_methods.get(cat, {})
+        total = sum(methods.values())
+        breakdown = {
+            m: {"count": c, "fraction": round(c / total, 3) if total else 0.0}
+            for m, c in sorted(methods.items())
+        }
+        scales = sorted({_scale_of(m) for m in methods})
+        return {
+            "breakdown": breakdown,
+            "scales": scales,
+            "mixed_scoring_warning": "binary" in scales and "partial_credit" in scales,
+        }
+
+    # Classify each category by the granularity of its dominant scoring method, so
+    # we can warn when the report compares binary-scored categories (means are pass
+    # rates) against partial-credit ones (means are continuous).
+    cat_scales = {
+        cat: _scale_of(max(methods.items(), key=lambda kv: kv[1])[0])
+        for cat, methods in by_category_methods.items() if methods
+    }
+    binary_cats = sorted(c for c, s in cat_scales.items() if s == "binary")
+    partial_cats = sorted(c for c, s in cat_scales.items() if s == "partial_credit")
+    cross_warn = bool(binary_cats) and bool(partial_cats)
+
     return {
         "model": ", ".join(sorted(runner_models)) if runner_models else "unknown",
         "provider": ", ".join(sorted(runner_providers)) if runner_providers else None,
         "judge_model": ", ".join(sorted(judge_models)) if judge_models else None,
+        "benchmark_version": BENCHMARK_VERSION,
         "timestamp": datetime.utcnow().isoformat(),
         "n_tasks": len(results),
         "overall": {
             "mean_score": avg(all_scores),
             "pass_rate_75": pass_rate(all_scores),
+        },
+        "scoring_methodology": {
+            "cross_category_comparison_warning": cross_warn,
+            "detail": (
+                f"Binary-scored categories (each task is 0 or 1, so the mean is a "
+                f"pass rate): {binary_cats}. Partial-credit categories (continuous "
+                f"0-1 means): {partial_cats}. Comparing a binary category's mean "
+                f"against a partial-credit one is not apples-to-apples — it "
+                f"overstates the gap. Compare within a scale, or use pass_rate_75 "
+                f"across all."
+            ) if cross_warn else None,
+            "binary_categories": binary_cats,
+            "partial_credit_categories": partial_cats,
+            "functional_failure_breakdown": functional_failures or None,
         },
         "cost_usd": {
             "total": round(runner_cost_total + judge_cost_total, 6) if cost_known else None,
@@ -198,7 +286,7 @@ def generate_report(results: list, tasks: dict) -> dict:
             "total": round(total_elapsed, 2),
             "mean": round(total_elapsed / elapsed_n, 2) if elapsed_n else None,
         },
-        "by_category": {k: {"mean": avg(v), "n": len(v), "pass_rate": pass_rate(v)} for k, v in by_category.items()},
+        "by_category": {k: {"mean": avg(v), "n": len(v), "pass_rate": pass_rate(v), **_category_methods(k)} for k, v in by_category.items()},
         "by_difficulty": {k: {"mean": avg(v), "n": len(v)} for k, v in by_difficulty.items()},
         "task_scores": sorted(task_scores, key=lambda x: (x["category"], x["task_id"]))
     }
@@ -220,7 +308,14 @@ def print_report(report: dict):
     print(f"\nBy Category:")
     for cat, stats in sorted(report["by_category"].items()):
         bar = "█" * int((stats["mean"] or 0) * 20)
-        print(f"  {cat:20s}  {bar:20s}  {stats['mean']:.3f}  (n={stats['n']})")
+        mix = "  ⚠ mixed scales" if stats.get("mixed_scoring_warning") else ""
+        print(f"  {cat:20s}  {bar:20s}  {stats['mean']:.3f}  (n={stats['n']}){mix}")
+
+    methodology = report.get("scoring_methodology") or {}
+    if methodology.get("cross_category_comparison_warning"):
+        print(f"\n  ⚠ Scoring scales differ across categories — category means are not "
+              f"directly comparable.\n    Binary (pass-rate) means: {methodology['binary_categories']}"
+              f"\n    Partial-credit means:     {methodology['partial_credit_categories']}")
 
     print(f"\nBy Difficulty:")
     for diff, stats in sorted(report["by_difficulty"].items()):

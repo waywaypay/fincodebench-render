@@ -108,3 +108,65 @@ def test_judge_unparseable_defaults_to_zero(monkeypatch):
     out = judge.llm_judge("p", None, "resp", "rubric")
     assert out["score"] == 0 and out["normalized"] == 0.0
     assert "parse_error" in out.get("key_issues", [])
+
+
+# ── Diagnostic failure judge: classifies WHY, never scores ─────────────────────
+def test_diagnostic_judge_classifies_and_never_scores(monkeypatch):
+    capture = {}
+    monkeypatch.setattr(judge, "client", _fake_judge_client(
+        capture, '{"failure_type": "signature_mismatch", "explanation": "wrong arg name"}'))
+    out = judge.diagnostic_failure_judge(
+        task_prompt="write f(a, b)", model_code="def f(a): ...",
+        test_code="f(1, b=2)", error_output="TypeError: unexpected keyword 'b'")
+    assert out["failure_type"] == "signature_mismatch"
+    assert out["method"] == "diagnostic_judge"
+    assert "score" not in out and "normalized" not in out   # diagnosis is not a score
+    # The judge must actually see the code and the error it's classifying.
+    judge_prompt = capture["messages"][0]["content"]
+    assert "def f(a)" in judge_prompt and "TypeError" in judge_prompt
+
+
+def test_diagnostic_judge_rejects_unknown_category(monkeypatch):
+    monkeypatch.setattr(judge, "client", _fake_judge_client({}, '{"failure_type": "banana"}'))
+    out = judge.diagnostic_failure_judge("p", "c", "t", "e")
+    assert out["failure_type"] == "runtime_error"   # out-of-vocab falls back, never raises
+
+
+def test_diagnostic_judge_unparseable_falls_back(monkeypatch):
+    monkeypatch.setattr(judge, "client", _fake_judge_client({}, "not json at all"))
+    out = judge.diagnostic_failure_judge("p", "c", "t", "e")
+    assert out["failure_type"] == "runtime_error"
+    assert out["method"] == "diagnostic_judge"
+
+
+def test_diagnostic_judge_survives_client_exception(monkeypatch):
+    def boom(**kwargs):
+        raise RuntimeError("network down")
+    monkeypatch.setattr(judge, "client", SimpleNamespace(create=boom))
+    out = judge.diagnostic_failure_judge("p", "c", "t", "e")
+    assert out["failure_type"] == "runtime_error"   # swallowed, not propagated
+
+
+# ── Scorer ↔ diagnostic integration: failure triggers diagnosis, pass doesn't ──
+def test_scorer_attaches_diagnosis_only_on_functional_failure(monkeypatch):
+    import scorer
+    monkeypatch.setattr(
+        judge, "diagnostic_failure_judge",
+        lambda **kw: {"failure_type": "wrong_formula", "explanation": "x", "method": "diagnostic_judge"},
+    )
+    failing = {"scoring_type": "functional", "prompt": "p", "test_code": "assert False\nprint('PASS')"}
+    res = {"final_response": "```python\nx = 1\n```"}
+
+    # Enabled + failing → diagnosis attached, score untouched (still 0).
+    sr = scorer.score_task(failing, res, run_diagnostic=True)
+    assert sr["score"] == 0.0
+    assert sr["diagnostic_judge_result"]["failure_type"] == "wrong_formula"
+
+    # Disabled → never calls the judge, no diagnosis field.
+    sr_off = scorer.score_task(failing, res, run_diagnostic=False)
+    assert "diagnostic_judge_result" not in sr_off
+
+    # Enabled but PASSING → no diagnosis (only failures are diagnosed).
+    passing = {"scoring_type": "functional", "prompt": "p", "test_code": "assert True\nprint('PASS')"}
+    sr_pass = scorer.score_task(passing, {"final_response": "```python\nx = 1\n```"}, run_diagnostic=True)
+    assert sr_pass["score"] == 1.0 and "diagnostic_judge_result" not in sr_pass

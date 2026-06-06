@@ -150,3 +150,130 @@ def test_debug_002_accepts_correct_solution():
 def test_debug_002_rejects_prediction_free_solution():
     code = "```python\n" + _LAZY_BACKTEST + "\n```"
     assert scorer.score_functional(code, TASKS["debug-002"]["test_code"])["score"] == 0.0
+
+
+# ── Fixed "gotcha" code_generation tasks: a prompt-compliant solver must pass ───
+# These three tasks previously had a mismatch between what the prompt described
+# and what the hidden test demanded (an undocumented 4th arg, an under-specified
+# adjustment formula). A reference implementation written strictly from the
+# clarified prompt must now score 1.0 — locking the prompt and test together so a
+# future prompt edit that re-introduces the gap is caught here.
+_SLOAN = """
+def compute_sloan_accruals(net_income, cfo, cfi, avg_assets):
+    total_accruals = net_income - (cfo + cfi)
+    accrual_ratio = total_accruals / avg_assets
+    return {"total_accruals": total_accruals,
+            "accrual_ratio": accrual_ratio,
+            "quality_flag": accrual_ratio > 0.05}
+"""
+
+_RECENCY = """
+def recency_weighted_forecast(revenues, weights_decay=0.9):
+    import numpy as np
+    n = len(revenues)
+    x = np.arange(n, dtype=float)
+    y = np.array(revenues, dtype=float)
+    w = np.array([weights_decay ** (n - 1 - i) for i in range(n)], dtype=float)
+    W = np.diag(w)
+    X = np.column_stack([np.ones(n), x])
+    beta = np.linalg.solve(X.T @ W @ X, X.T @ W @ y)
+    return float(beta[0] + beta[1] * n)
+"""
+
+_FORECASTER = """
+class RevenueForecaster:
+    def __init__(self, beat_rate=0.7):
+        self.beat_rate = beat_rate
+        self._actuals = []
+        self._guidance = []
+    def add_quarter(self, actual, guidance_low, guidance_high):
+        self._actuals.append(actual)
+        self._guidance.append((guidance_low, guidance_high))
+    def forecast(self):
+        import numpy as np
+        lo, hi = self._guidance[-1]
+        mid = (lo + hi) / 2
+        n = len(self._actuals)
+        slope, intercept = np.polyfit(np.arange(n), np.array(self._actuals, dtype=float), 1)
+        return {
+            "naive": self._actuals[-1],
+            "guidance_adjusted": mid * (1 + (self.beat_rate - 0.5) * 0.02),
+            "trend": float(intercept + slope * n),
+        }
+"""
+
+
+def test_codegen_005_sloan_signature_is_satisfiable():
+    code = "```python\n" + _SLOAN + "\n```"
+    assert scorer.score_functional(code, TASKS["codegen-005"]["test_code"])["score"] == 1.0
+
+
+def test_codegen_008_recency_weighted_forecast_passes():
+    code = "```python\n" + _RECENCY + "\n```"
+    assert scorer.score_functional(code, TASKS["codegen-008"]["test_code"])["score"] == 1.0
+
+
+def test_codegen_009_forecaster_formula_passes():
+    code = "```python\n" + _FORECASTER + "\n```"
+    assert scorer.score_functional(code, TASKS["codegen-009"]["test_code"])["score"] == 1.0
+
+
+def test_all_code_generation_tasks_have_room_to_iterate():
+    # Phase 3: codegen tasks must allow enough turns to self-test via execute_python.
+    for t in TASKS.values():
+        if t["category"] == "code_generation":
+            assert t["max_turns"] >= 8, f"{t['id']} max_turns={t['max_turns']} (<8)"
+
+
+# ── Phase 5: expanded agentic_real tasks must demand real agentic work ──────────
+# The original three agentic_real tasks used a single clean snapshot of a real
+# mega-cap (memorizable, no data-quality challenge). The five new ones use
+# synthetic companies, require fetching TWO filings, and embed a trap that a
+# careless reader falls for. These structural invariants guard that design.
+_NEW_AGENTIC_REAL = [f"agentic_real-{n:03d}" for n in range(4, 9)]
+
+
+def test_expanded_agentic_real_tasks_exist():
+    for tid in _NEW_AGENTIC_REAL:
+        assert tid in TASKS, f"missing {tid}"
+    # The category grew from 3 to 8 — a more stable sample than the original 3.
+    assert sum(1 for t in TASKS.values() if t["category"] == "agentic_real") == 8
+
+
+def test_new_agentic_real_require_two_filings_and_judge():
+    for tid in _NEW_AGENTIC_REAL:
+        t = TASKS[tid]
+        assert t["category"] == "agentic_real"
+        assert t["scoring_type"] == "llm_judge"
+        assert t["max_turns"] >= 8
+        filings = t["tools_data"]["snapshots"]["fetch_sec_filing"]
+        # Two filings → the model cannot answer from a single fetch.
+        assert len(filings) >= 2, f"{tid} should require >=2 filings, has {len(filings)}"
+        # Rubric must score the trap (fetch only one / take headline at face value).
+        assert "trap" in t["rubric"].lower(), f"{tid} rubric should name the trap"
+
+
+def test_new_agentic_real_use_synthetic_companies():
+    # No real mega-caps (avoids training-data contamination the originals risk).
+    blob = " ".join(
+        k for tid in _NEW_AGENTIC_REAL
+        for k in TASKS[tid]["tools_data"]["snapshots"]["fetch_sec_filing"]
+    ).lower()
+    for real in ("microsoft", "nvidia", "apple", "amazon", "google", "meta"):
+        assert real not in blob, f"new task references real company {real!r}"
+
+
+def test_new_agentic_real_snapshots_do_not_leak_the_answer():
+    # The snapshots must hand over RAW inputs only — never the pre-computed adjusted
+    # metric the rubric asks the model to derive. (Guards against turning an
+    # analysis task back into a reading-comprehension task.)
+    leaks = {
+        "agentic_real-004": ["43.8", "47.0%", "like-for-like margin"],
+        "agentic_real-005": ["annualized", "54%", "60%"],
+        "agentic_real-006": ["52 day", "organic dso"],
+        "agentic_real-008": ["0.91", "adjusted cfo/ni"],
+    }
+    for tid, banned in leaks.items():
+        text = " ".join(TASKS[tid]["tools_data"]["snapshots"]["fetch_sec_filing"].values()).lower()
+        for phrase in banned:
+            assert phrase.lower() not in text, f"{tid} snapshot leaks computed answer: {phrase!r}"
