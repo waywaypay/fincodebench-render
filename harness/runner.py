@@ -96,7 +96,7 @@ WEB_SEARCH_TOOL = {
     "description": (
         "Search for earnings call transcripts, SEC filings (10-K, 10-Q, 8-K), "
         "investor day and conference presentations, analyst reports, and other "
-        "public financial information. Returns up to 5 relevant documents with "
+        "public financial information. Returns up to 8 relevant documents with "
         "title, source, and a content excerpt. Use this for information not "
         "available in local files or the filing service — such as historical "
         "precedents, management commentary from calls, or industry comparables."
@@ -204,9 +204,13 @@ def _fetch_filing(filings: dict, company: str, year) -> str:
 def _web_search(web_results: list, query: str) -> str:
     """Return canned web search results ranked by keyword overlap with the query.
 
-    Each document in web_results is a dict with 'title', 'source', and 'content'.
-    Ranking is a simple word-overlap score so that reasonable analyst queries
-    reliably surface the relevant documents — the model never sees this logic."""
+    Each document in web_results is a dict with 'title', 'source', and 'content',
+    plus an optional 'keywords' field of concept synonyms (ticker symbols,
+    'days sales outstanding' for DSO, 'channel loading', etc.). The keywords are
+    folded into the match text but never rendered, so that scoring depends on the
+    model's analysis rather than on guessing the exact wording in a document — a
+    reasonable concept query surfaces the relevant documents. The model never sees
+    this logic."""
     if not query:
         return "(no query provided)"
     if not web_results:
@@ -218,6 +222,7 @@ def _web_search(web_results: list, query: str) -> str:
         searchable = (
             doc.get("title", "") + " " +
             doc.get("source", "") + " " +
+            doc.get("keywords", "") + " " +
             doc.get("content", "")
         ).lower()
         hits = sum(1 for t in query_terms if t in searchable)
@@ -225,7 +230,7 @@ def _web_search(web_results: list, query: str) -> str:
             scored.append((hits, doc))
 
     scored.sort(key=lambda x: x[0], reverse=True)
-    top = scored[:5]
+    top = scored[:8]
 
     if not top:
         return "(no results found — try a broader or different query)"
