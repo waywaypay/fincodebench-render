@@ -358,7 +358,7 @@
       deliverable is code; correctness is settled by executing it, not by matching text.</p></div>
     <div class="card method-card"><h3>llm_judge</h3><p>A separate Claude call (the <b>judge model</b>, deliberately
       distinct from the runner to avoid self-grading) scores the response <b>0–4</b> against a per-task rubric, normalized
-      to <code>score / 4</code>. <b>Why:</b> used for multi-step agentic tasks, whose output mixes code, execution and
+      to <code>score / 4</code>. <b>Why:</b> used for workflow and agentic tasks, whose output mixes code, execution and
       prose with no single canonical answer — only a rubric can judge whether the analysis was done well.</p></div>
     <div class="card method-card feature"><h3>pass@0.75</h3>
       <div class="feature-num">≥ 0.75</div>
