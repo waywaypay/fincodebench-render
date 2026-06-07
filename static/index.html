@@ -317,6 +317,34 @@
     color:var(--ink);background:var(--chip,#eef0f4);border:1px solid var(--line,#e2e5ea);border-radius:999px;
     max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom}
   .runs-table .small{font-size:12.5px;color:var(--muted)}
+  /* ── run tags ──────────────────────────────────────── */
+  .tag-cell{width:110px;padding:10px 12px}
+  .run-tag{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:500;
+    padding:2px 8px;border-radius:999px;background:var(--tint);border:1px solid var(--border);
+    color:var(--ink);cursor:pointer;white-space:nowrap;max-width:100px;
+    overflow:hidden;text-overflow:ellipsis;transition:background .12s}
+  .run-tag:hover{background:var(--border)}
+  .run-tag.active-tag{background:var(--ink);color:var(--bg)}
+  .run-tag .tag-x{font-size:10px;opacity:.5;margin-left:1px;flex-shrink:0}
+  .run-tag .tag-x:hover{opacity:1}
+  .run-tag-add{display:inline-block;font-size:11px;color:var(--faint);cursor:pointer;
+    padding:2px 4px;border-radius:4px;transition:color .12s}
+  .run-tag-add:hover{color:var(--muted)}
+  .tag-input{font:inherit;font-size:11px;padding:3px 7px;border:1px solid var(--border);
+    border-radius:6px;width:90px;background:var(--card);color:var(--ink);outline:none}
+  .tag-input:focus{border-color:var(--ink)}
+  /* ── tag comparison view ────────────────────────────── */
+  .tag-comp-wrap{margin:16px 0}
+  .tag-comp-head{display:flex;align-items:baseline;gap:12px;margin-bottom:14px}
+  .tag-comp-head h3{font-size:15px;font-weight:600;margin:0;color:var(--ink)}
+  .tag-comp-head .tag-comp-tag{font-weight:700}
+  .comp-cat-group{margin-bottom:14px}
+  .comp-cat-group:last-child{margin-bottom:0}
+  .comp-cat-label{font-size:12px;font-weight:600;color:var(--muted);
+    text-transform:uppercase;letter-spacing:.08em;margin-bottom:5px}
+  .comp-run-label{font-size:11px;color:var(--muted);width:130px;flex-shrink:0;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .chart-row.comp-row .clabel{width:130px}
   .badge.st-completed{background:#e9efe6;color:#4d6346;border-color:#dae2d4}
   .badge.st-running{background:#f4ecdd;color:#7b5d36;border-color:#eaddc7}
   .badge.st-queued{background:var(--panel);color:#5d5a50;border-color:#e5e1d7}
@@ -443,8 +471,9 @@
     <label>All runs</label>
     <button class="btn ghost" id="triggerRunBtn">Trigger a new run</button>
   </div>
-  <p class="note" style="margin:0 0 4px">Each run shows its model, cost, and latency. Click a completed run to drill into its per-task results. Completed runs are also cached in this browser (<span class="muted">💾 local</span>), so they stay visible even if the server is restarted.</p>
+  <p class="note" style="margin:0 0 4px">Each run shows its model, cost, and latency. Click a completed run to drill into its per-task results. Use the <strong>Tag</strong> column to group runs — runs sharing a tag can be compared side-by-side. Completed runs are also cached in this browser (<span class="muted">💾 local</span>), so they stay visible even if the server is restarted.</p>
   <div id="runsTableWrap"></div>
+  <div id="tagComparisonWrap"></div>
   <div id="resultsBody"></div>
 
   <details class="card trigger">
@@ -489,7 +518,9 @@
 
 <script>
 const STATE = {tasks:[], runs:[], providers:[], selectedRun:null, resultsCollapsed:false,
-  globalForm:null, activeCategory:null, selectedCatRun:null, catResultsCollapsed:false, catColors:{
+  globalForm:null, activeCategory:null, selectedCatRun:null, catResultsCollapsed:false,
+  selectedTag:null,
+  catColors:{
   extraction:'#5b7c99', code_generation:'#7d6794', computation:'#5f7e55',
   workflow:'#3f8079', agentic:'#a6793f', agentic_real:'#7a5223', debug:'#a85a4f'}};
 const CAT_DESC = {
@@ -906,6 +937,19 @@ function lcSaveRun(run,report){
 function lcReport(id){ const e=lcRead()[id]; return e?e.report:null; }
 function lcRuns(){ return Object.values(lcRead()).map(e=>e.run).filter(Boolean); }
 
+// ---------- per-run tag storage (in localStorage, applied after run completes) ----
+const LS_TAGS_KEY='fcb_run_tags_v1';
+function tagsRead(){ try{ return JSON.parse(localStorage.getItem(LS_TAGS_KEY)||'{}'); }catch{ return {}; } }
+function tagsWrite(m){ try{ localStorage.setItem(LS_TAGS_KEY,JSON.stringify(m)); }catch(e){} }
+function tagGet(id){ return tagsRead()[id]||null; }
+function tagSet(id,tag){
+  const m=tagsRead();
+  const t=(tag||'').trim().slice(0,60);
+  if(t) m[id]=t; else delete m[id];
+  tagsWrite(m);
+}
+function runsForTag(tag){ return STATE.runs.filter(r=>tagGet(r.run_id)===tag&&r.status==='completed'); }
+
 // Merge server runs with the local cache. Server wins on duplicates; runs that
 // exist only in this browser (server forgot them) are flagged so the table can
 // show where they came from.
@@ -923,6 +967,13 @@ function setRuns(serverRuns){
 // id so each table's highlight logic stays scoped to its own rows.
 function runRowInner(r){
   const label=r.label?`<div class="run-label" title="Run label">${esc(r.label)}</div>`:'';
+  const tag=tagGet(r.run_id);
+  const isActive=tag&&STATE.selectedTag===tag;
+  const tagCell=r.status==='completed'
+    ?(tag
+      ?`<span class="run-tag${isActive?' active-tag':''}" data-tag="${esc(tag)}" title="Tag: ${esc(tag)} — click to compare all runs with this tag">${esc(tag)}<span class="tag-x" data-tag-remove="${esc(r.run_id)}" title="Remove tag">×</span></span>`
+      :`<span class="run-tag-add" title="Click to add a tag and group this run with others">+ tag</span>`)
+    :'';
   return `<td><div class="run-when">${esc(fmtWhen(r.created_at))}</div>
            <div class="run-id mono">${esc(r.run_id.slice(0,15))}</div>${label}</td>
        <td class="mono small">${esc(r.model||'—')}</td>
@@ -931,20 +982,47 @@ function runRowInner(r){
        <td>${r.mean_score!=null?pct(r.mean_score):'—'}</td>
        <td>${r.pass_rate!=null?pct(r.pass_rate):'—'}</td>
        <td class="mono">${fmtCost(r.cost_usd)}</td>
-       <td class="mono">${fmtDuration(r.elapsed_seconds)}</td>`;
+       <td class="mono">${fmtDuration(r.elapsed_seconds)}</td>
+       <td class="tag-cell">${tagCell}</td>`;
 }
 function runsTableCard(runs, onRowClick, datasetKey){
   const card=el('div','card runs-card');
   card.innerHTML='<table class="runs-table"><thead><tr>'+
     '<th>Run</th><th>Model</th><th>Status</th><th>Tasks</th>'+
-    '<th>Mean</th><th>pass@.75</th><th>Cost</th><th>Latency</th></tr></thead><tbody></tbody></table>';
+    '<th>Mean</th><th>pass@.75</th><th>Cost</th><th>Latency</th><th>Tag</th></tr></thead><tbody></tbody></table>';
   const tb=card.querySelector('tbody');
   runs.forEach(r=>{
     const done=r.status==='completed';
     const tr=el('tr','run-row'+(done?' clickable':''));
     if(done) tr.dataset[datasetKey]=r.run_id;
     tr.innerHTML=runRowInner(r);
-    if(done) tr.onclick=()=>onRowClick(r.run_id);
+    if(done) tr.onclick=(e)=>{
+      if(e.target.closest('.tag-cell')) return;
+      onRowClick(r.run_id);
+    };
+    // Wire tag cell interactions
+    const tagTd=tr.querySelector('.tag-cell');
+    if(tagTd){
+      const tagBadge=tagTd.querySelector('.run-tag');
+      const tagAdd=tagTd.querySelector('.run-tag-add');
+      if(tagBadge){
+        // click tag badge → select for comparison; click × → remove tag
+        tagBadge.onclick=(e)=>{
+          e.stopPropagation();
+          const rm=e.target.closest('[data-tag-remove]');
+          if(rm){
+            const prevTag=tagGet(rm.dataset.tagRemove);
+            tagSet(rm.dataset.tagRemove,'');
+            if(STATE.selectedTag===prevTag && !runsForTag(prevTag).length) STATE.selectedTag=null;
+            renderRunsTable(); return;
+          }
+          selectTag(tagBadge.dataset.tag);
+        };
+      }
+      if(tagAdd){
+        tagAdd.onclick=(e)=>{ e.stopPropagation(); openTagEditor(r.run_id, tagTd); };
+      }
+    }
     tb.append(tr);
   });
   return card;
@@ -964,6 +1042,10 @@ function renderRunsTable(){
     return;
   }
   wrap.innerHTML=''; wrap.append(runsTableCard(runs, selectRun, 'runId'));
+
+  // Refresh tag comparison if one is active
+  if(STATE.selectedTag) renderTagComparison(STATE.selectedTag);
+  else $('#tagComparisonWrap').innerHTML='';
 
   // Keep the current selection if it's still a completed run; otherwise
   // auto-open the most recent completed run so details are visible by default.
@@ -985,6 +1067,122 @@ function selectRun(id){
   STATE.resultsCollapsed=false;          // a freshly opened run starts expanded
   highlightRow(id);
   loadRun(id);
+}
+
+// ---- tag comparison ----
+function selectTag(tag){
+  STATE.selectedTag=(STATE.selectedTag===tag)?null:tag;
+  renderRunsTable();
+}
+
+function openTagEditor(runId, cell){
+  const existing=tagGet(runId)||'';
+  const inp=el('input');
+  inp.className='tag-input'; inp.type='text'; inp.value=existing;
+  inp.placeholder='tag name…'; inp.maxLength=60;
+  cell.innerHTML=''; cell.append(inp);
+  inp.focus(); inp.select();
+  let committed=false;
+  const save=()=>{ if(committed) return; committed=true; tagSet(runId, inp.value); renderRunsTable(); };
+  inp.onkeydown=(e)=>{ if(e.key==='Enter'){e.preventDefault();save();} if(e.key==='Escape'){committed=true;renderRunsTable();} };
+  inp.onblur=save;
+}
+
+// Run comparison colors (one per run, cycles if > 6 runs)
+const TAG_COLORS=['#5b7c99','#7d6794','#5f7e55','#a6793f','#3f8079','#a85a4f'];
+
+async function renderTagComparison(tag){
+  const wrap=$('#tagComparisonWrap'); if(!tag){wrap.innerHTML='';return;}
+  const runs=runsForTag(tag);
+  if(!runs.length){wrap.innerHTML='';return;}
+
+  // Show a loading card while reports are fetched
+  wrap.innerHTML='';
+  const loadCard=el('div','card tag-comp-wrap');
+  loadCard.innerHTML=`<div class="empty">Loading comparison for <strong>${esc(tag)}</strong>…</div>`;
+  wrap.append(loadCard);
+
+  const reports=await Promise.all(runs.map(r=>fetchReport(r.run_id)));
+  const entries=runs.map((r,i)=>({run:r,report:reports[i],color:TAG_COLORS[i%TAG_COLORS.length]}))
+    .filter(e=>e.report);
+  wrap.innerHTML='';
+  if(!entries.length) return;
+
+  const section=el('div','tag-comp-wrap');
+
+  // Header with clear button
+  const head=el('div','tag-comp-head');
+  head.innerHTML=`<h3>Tag: <span class="tag-comp-tag">${esc(tag)}</span> &mdash; ${entries.length} run${entries.length===1?'':'s'} compared</h3>`;
+  const clearBtn=el('button','btn ghost');
+  clearBtn.textContent='Clear tag view';
+  clearBtn.onclick=()=>selectTag(tag);
+  head.append(clearBtn);
+  section.append(head);
+
+  // Summary comparison table
+  const sumCard=el('div','card');
+  sumCard.innerHTML='<h3>Overview</h3>'+
+    '<table class="runs-table" style="font-size:13px"><thead><tr>'+
+    '<th>Run</th><th>Model</th><th>Mean</th><th>pass@.75</th><th>Tasks</th><th>Cost</th><th>Latency</th></tr></thead><tbody>'+
+    entries.map(e=>`<tr>
+      <td><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${e.color};margin-right:7px;vertical-align:middle"></span>
+        <span class="mono small">${esc(e.run.run_id.slice(0,15))}</span></td>
+      <td class="mono small">${esc(e.run.model||'—')}</td>
+      <td><strong>${pct(e.run.mean_score)}</strong></td>
+      <td>${pct(e.run.pass_rate)}</td>
+      <td>${e.run.n_tasks??'—'}</td>
+      <td class="mono">${fmtCost(e.run.cost_usd)}</td>
+      <td class="mono">${fmtDuration(e.run.elapsed_seconds)}</td>
+    </tr>`).join('')+'</tbody></table>';
+  section.append(sumCard);
+
+  // Grouped bar chart: mean by category
+  const allCats=[...new Set(entries.flatMap(e=>Object.keys(e.report.by_category||{})))];
+  if(allCats.length){
+    const catCard=el('div','card');
+    catCard.append(el('h3',null,'Mean by category'));
+    allCats.forEach(cat=>{
+      const g=el('div','comp-cat-group');
+      g.append(el('div','comp-cat-label',cat));
+      entries.forEach(e=>{
+        const val=e.report.by_category?.[cat]?.mean;
+        const n=e.report.by_category?.[cat]?.n;
+        const w=Math.max(0,Math.min(100,(val??0)*100));
+        const row=el('div','chart-row comp-row');
+        row.innerHTML=`<div class="clabel comp-run-label mono small" title="${esc(e.run.run_id)}">${esc(e.run.model||e.run.run_id.slice(0,12))}</div>
+          <div class="ctrack"><div class="cfill" style="width:${w}%;background:${e.color}">${val!=null?Math.round(w)+'%':''}</div></div>
+          <div class="cn">${n!=null?`n=${n}`:''}</div>`;
+        g.append(row);
+      });
+      catCard.append(g);
+    });
+    section.append(catCard);
+  }
+
+  // Grouped bar chart: mean by difficulty
+  const allDiffs=['easy','medium','hard'].filter(d=>entries.some(e=>e.report.by_difficulty?.[d]));
+  if(allDiffs.length){
+    const diffCard=el('div','card');
+    diffCard.append(el('h3',null,'Mean by difficulty'));
+    allDiffs.forEach(diff=>{
+      const g=el('div','comp-cat-group');
+      g.append(el('div','comp-cat-label',diff));
+      entries.forEach(e=>{
+        const val=e.report.by_difficulty?.[diff]?.mean;
+        const n=e.report.by_difficulty?.[diff]?.n;
+        const w=Math.max(0,Math.min(100,(val??0)*100));
+        const row=el('div','chart-row comp-row');
+        row.innerHTML=`<div class="clabel comp-run-label mono small" title="${esc(e.run.run_id)}">${esc(e.run.model||e.run.run_id.slice(0,12))}</div>
+          <div class="ctrack"><div class="cfill" style="width:${w}%;background:${e.color}">${val!=null?Math.round(w)+'%':''}</div></div>
+          <div class="cn">${n!=null?`n=${n}`:''}</div>`;
+        g.append(row);
+      });
+      diffCard.append(g);
+    });
+    section.append(diffCard);
+  }
+
+  wrap.append(section);
 }
 function applyResultsCollapse(){
   $('#resultsBody').classList.toggle('collapsed', STATE.resultsCollapsed);
