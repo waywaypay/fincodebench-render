@@ -7,7 +7,51 @@ build_task_tools and its executors are pure, so these run with no network.
 """
 import json
 
+import providers
 import runner
+
+
+def test_task_timeout_env_parsing(monkeypatch):
+    monkeypatch.delenv("FINCODEBENCH_TASK_TIMEOUT_SECONDS", raising=False)
+    assert runner.task_timeout_seconds() == 600.0
+
+    monkeypatch.setenv("FINCODEBENCH_TASK_TIMEOUT_SECONDS", "45")
+    assert runner.task_timeout_seconds() == 45.0
+
+    monkeypatch.setenv("FINCODEBENCH_TASK_TIMEOUT_SECONDS", "0")
+    assert runner.task_timeout_seconds() == 600.0
+
+    monkeypatch.setenv("FINCODEBENCH_TASK_TIMEOUT_SECONDS", "bad")
+    assert runner.task_timeout_seconds() == 600.0
+
+
+def test_run_task_stops_when_wall_clock_budget_is_exhausted(monkeypatch):
+    task = {
+        "id": "timeout-test",
+        "category": "agentic",
+        "difficulty": "hard",
+        "scoring_type": "llm_judge",
+        "prompt": "keep using tools",
+        "max_turns": 3,
+    }
+
+    class LoopingClient:
+        def create(self, **kwargs):
+            return providers.ChatResponse(
+                "",
+                [{"id": "call_1", "name": "execute_python", "input": {"code": "print('ok')"}}],
+                "tool_use",
+            )
+
+    times = iter([0, 0, 0, 0, 999, 999])
+    monkeypatch.setattr(runner, "client", LoopingClient())
+    monkeypatch.setattr(runner, "task_timeout_seconds", lambda: 10.0)
+    monkeypatch.setattr(runner.time, "time", lambda: next(times))
+
+    result = runner.run_task(task, verbose=False)
+
+    assert result["turns"] == 1
+    assert result["error"] == "[TIMEOUT] Task exceeded 10s wall-clock budget before turn 2"
 
 
 def _task_with_tools():
