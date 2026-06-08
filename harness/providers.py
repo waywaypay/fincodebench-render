@@ -22,6 +22,10 @@ from dataclasses import dataclass, field
 # key_hint: placeholder shown in the dashboard key field
 # default_model / default_judge_model: used when the caller doesn't override
 # models:   a few suggested model ids (powers the dashboard datalist; not enforced)
+# public_models: True if the provider's /models is reachable without a key, so the
+#           dashboard can load the full live catalogue even before a key is entered
+# models_query: optional query params forwarded to /models (e.g. {"type": "text"}
+#           to keep Venice's listing to chat-capable models, not image/tts/etc.)
 PROVIDERS = {
     "anthropic": {
         "label": "Anthropic",
@@ -88,10 +92,11 @@ PROVIDERS = {
         "key_hint": "sk-…",
         "default_model": "qwen-plus",
         "default_judge_model": "qwen-max",
+        # qwen3 series is current; the qwen-max / qwen-plus / qwen-turbo / qwen-flash
+        # aliases stay valid and track the latest snapshots (qwen2.5-* superseded).
         "models": [
-            "qwen-max", "qwen-plus", "qwen-turbo", "qwen-long",
-            "qwen2.5-72b-instruct", "qwen2.5-32b-instruct", "qwen2.5-14b-instruct",
-            "qwen2.5-7b-instruct", "qwen2.5-coder-32b-instruct", "qwq-32b-preview",
+            "qwen3-max", "qwen-max", "qwen-plus", "qwen-flash", "qwen-turbo",
+            "qwen3.5-flash", "qwen3-coder-plus", "qwen3-coder-flash", "qwq-plus",
         ],
         "docs": "https://bailian.console.alibabacloud.com/?apiKey=1",
     },
@@ -104,10 +109,14 @@ PROVIDERS = {
         "key_hint": "sk-…",
         "default_model": "moonshot-v1-8k",
         "default_judge_model": "moonshot-v1-32k",
+        # kimi-k2.6 (256k) is the current flagship; the moonshot-v1 family is
+        # still served. The older kimi-k2-*-preview / kimi-latest / -thinking-preview
+        # ids were retired, so they're dropped here.
         "models": [
+            "kimi-k2.6", "kimi-k2.5",
             "moonshot-v1-8k", "moonshot-v1-32k", "moonshot-v1-128k",
-            "moonshot-v1-auto", "kimi-k2-0711-preview", "kimi-latest",
-            "kimi-thinking-preview",
+            "moonshot-v1-8k-vision-preview", "moonshot-v1-32k-vision-preview",
+            "moonshot-v1-128k-vision-preview",
         ],
         "docs": "https://platform.moonshot.ai/console/api-keys",
     },
@@ -117,21 +126,30 @@ PROVIDERS = {
         "base_url": "https://api.venice.ai/api/v1",
         "key_env": "VENICE_API_KEY",
         "key_hint": "your Venice API key",
+        # Venice's /models is public — mark it so the dashboard loads the full
+        # live catalogue without a key (like OpenRouter), instead of falling back
+        # to the static list below.
+        "public_models": True,
+        # Venice's /models can return image/tts/embedding/… models too; pin the
+        # listing to text so the dropdown only offers chat-capable models.
+        "models_query": {"type": "text"},
         "default_model": "llama-3.3-70b",
-        "default_judge_model": "llama-3.1-405b",
-        # Venice's catalogue is large and changes often — these are common
-        # starting points; the dashboard fetches the full live list from the key.
+        "default_judge_model": "deepseek-v3.2",
+        # Venice's catalogue is large and rotates often — these are current
+        # starting points; with public_models the dashboard shows the full live
+        # list, so this is only a fallback if that fetch fails.
         "models": [
             "llama-3.3-70b",
-            "llama-3.1-405b",
             "llama-3.2-3b",
-            "qwen3-235b",
-            "qwen3-4b",
-            "qwen-2.5-qwq-32b",
-            "mistral-31-24b",
-            "deepseek-r1-671b",
-            "venice-uncensored",
-            "dolphin-2.9.2-qwen2-72b",
+            "qwen3-235b-a22b-instruct-2507",
+            "qwen3-coder-480b-a35b-instruct-turbo",
+            "deepseek-v3.2",
+            "mistral-small-3-2-24b-instruct",
+            "zai-org-glm-5-1",
+            "venice-uncensored-1-2",
+            "claude-sonnet-4-6",
+            "kimi-k2-6",
+            "hermes-3-llama-3.1-405b",
         ],
         "docs": "https://venice.ai/settings/api",
     },
@@ -257,7 +275,10 @@ class ChatClient:
         Anthropic and OpenAI SDKs expose client.models.list() with `.id` on each
         item. Raises on auth/network errors so callers can fall back to the
         static `models` suggestions in the registry."""
-        resp = self._client.models.list()
+        # Some providers expose typed catalogues (e.g. Venice's text/image/tts);
+        # forward the provider's models_query so we only list chat-capable models.
+        query = self._cfg.get("models_query")
+        resp = self._client.models.list(extra_query=query) if query else self._client.models.list()
         items = getattr(resp, "data", None)
         if items is None:
             items = list(resp)  # both SDKs' page objects are iterable
