@@ -39,6 +39,15 @@ def test_openrouter_marked_public_and_lists_are_substantial():
         assert len(reg[name]["models"]) >= 7, name
 
 
+def test_venice_marked_public_for_full_live_catalogue():
+    # Venice's /models is public, so the dashboard should load the full live
+    # list without a key (like OpenRouter) instead of the static fallback.
+    reg = {p["name"]: p for p in providers.public_registry()}
+    assert reg["venice"]["public_models"] is True
+    # The listing is pinned to text models so non-chat (image/tts/…) ids stay out.
+    assert providers.PROVIDERS["venice"]["models_query"] == {"type": "text"}
+
+
 def test_openai_tool_loop_translation():
     captured = []
 
@@ -199,6 +208,55 @@ def test_anthropic_models_are_current():
     assert "claude-sonnet-4-6" in anthropic_models
     assert "claude-opus-4-5" not in anthropic_models  # superseded
     assert providers.PROVIDERS["anthropic"]["default_judge_model"] == "claude-sonnet-4-6"
+
+
+def test_venice_models_are_current():
+    # The old static lineup pointed at models Venice has since retired — most
+    # importantly the default judge (llama-3.1-405b), which would fail every run.
+    cfg = providers.PROVIDERS["venice"]
+    retired = {"llama-3.1-405b", "qwen3-4b", "qwen-2.5-qwq-32b", "mistral-31-24b",
+               "deepseek-r1-671b", "venice-uncensored", "dolphin-2.9.2-qwen2-72b"}
+    assert retired.isdisjoint(cfg["models"]), "stale Venice ids still listed"
+    assert cfg["default_model"] not in retired
+    assert cfg["default_judge_model"] not in retired
+    # Defaults must be ids the live text catalogue actually offers.
+    assert cfg["default_model"] in cfg["models"]
+    assert cfg["default_judge_model"] in cfg["models"]
+
+
+def test_kimi_and_qwen_models_are_current():
+    # Kimi: the retired k2-preview / kimi-latest / -thinking-preview ids are gone,
+    # and the current flagship is listed.
+    kimi = providers.PROVIDERS["kimi"]["models"]
+    for dead in ("kimi-k2-0711-preview", "kimi-latest", "kimi-thinking-preview", "moonshot-v1-auto"):
+        assert dead not in kimi, dead
+    assert "kimi-k2.6" in kimi
+    # Qwen: qwen3 era, not the superseded qwen2.5 lineup.
+    qwen = providers.PROVIDERS["qwen"]["models"]
+    assert "qwen3-max" in qwen
+    assert not any(m.startswith("qwen2.5") for m in qwen)
+
+
+def test_list_models_forwards_models_query():
+    # Venice carries models_query, so list_models must pass it as extra_query so
+    # the catalogue is filtered server-side to chat-capable (text) models.
+    captured = {}
+
+    def fake_list(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(data=[SimpleNamespace(id="llama-3.3-70b")])
+
+    c = providers.ChatClient("venice", "k")
+    c._client = SimpleNamespace(models=SimpleNamespace(list=fake_list))
+    assert c.list_models() == ["llama-3.3-70b"]
+    assert captured.get("extra_query") == {"type": "text"}
+
+    # Providers without models_query call list() with no extra_query.
+    captured.clear()
+    c2 = providers.ChatClient("openai", "k")
+    c2._client = SimpleNamespace(models=SimpleNamespace(list=fake_list))
+    c2.list_models()
+    assert "extra_query" not in captured
 
 
 def test_anthropic_system_passthrough():
