@@ -48,7 +48,44 @@ def test_run_benchmark_concurrency_preserves_task_order_and_saves_raw(tmp_path, 
     assert (results_dir / "raw" / "slow.json").exists()
     assert (results_dir / "raw" / "fast.json").exists()
     assert (results_dir / "raw" / "medium.json").exists()
+    assert [p[0] for p in progress] == [1, 2, 3, 3]
     assert progress[-1] == (3, 3, None)
+
+
+def test_run_benchmark_sequential_reports_current_then_persisted_done(tmp_path, monkeypatch):
+    tasks = [_task("one"), _task("two")]
+    tasks_file = tmp_path / "tasks.json"
+    tasks_file.write_text(json.dumps(tasks))
+    results_dir = tmp_path / "results"
+
+    monkeypatch.setattr(runner, "TASKS_FILE", tasks_file)
+    monkeypatch.setattr(runner, "RESULTS_DIR", results_dir)
+
+    def fake_run_task(task, verbose=True):
+        return {
+            "task_id": task["id"],
+            "category": task["category"],
+            "difficulty": task["difficulty"],
+            "scoring_type": task["scoring_type"],
+            "error": None,
+        }
+
+    monkeypatch.setattr(runner, "run_task", fake_run_task)
+
+    progress = []
+    runner.run_benchmark(
+        verbose=True,
+        concurrency=1,
+        progress_callback=lambda done, total, current: progress.append((done, total, current)),
+    )
+
+    assert progress == [
+        (0, 2, "one"),
+        (1, 2, None),
+        (1, 2, "two"),
+        (2, 2, None),
+        (2, 2, None),
+    ]
 
 
 def test_coerce_concurrency_rejects_non_positive_values():

@@ -914,7 +914,9 @@ function statusBadge(r){
   const s=r.status||'unknown';
   let label=s;
   if(s==='running' && r.progress && r.progress.total){
-    label=`running ${r.progress.done}/${r.progress.total}`;
+    const phase=r.progress.phase==='judging'?'judging':r.progress.phase==='scoring'?'scoring':'running';
+    label=`${phase} ${r.progress.done}/${r.progress.total}`;
+    if(r.progress.current) label+=` · ${r.progress.current}`;
   }
   return `<span class="badge st-${esc(s)}">${esc(label)}</span>`;
 }

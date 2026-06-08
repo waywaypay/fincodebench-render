@@ -142,6 +142,20 @@ TOOLS = [EXECUTE_PYTHON_TOOL]
 MAX_READ_FILE_CHARS = 6000
 
 
+def task_timeout_seconds() -> float:
+    """Wall-clock budget for a single task. This protects sequential web runs
+    from sitting on one slow reasoning-heavy model/task combination indefinitely
+    after earlier tasks have already completed. Override with
+    FINCODEBENCH_TASK_TIMEOUT_SECONDS; defaults to 600 seconds.
+    """
+    raw = os.environ.get("FINCODEBENCH_TASK_TIMEOUT_SECONDS", "600").strip()
+    try:
+        timeout = float(raw)
+    except (TypeError, ValueError):
+        return 600.0
+    return timeout if timeout > 0 else 600.0
+
+
 # ── Tool executors ─────────────────────────────────────────────────────────────
 def execute_python(code: str, timeout: int = 30, cwd: Optional[str] = None) -> str:
     """Run Python code in a subprocess, return combined stdout+stderr. When `cwd`
@@ -461,10 +475,17 @@ def run_task(task: dict, verbose: bool = True) -> dict:
     tools, executors, cleanup = build_task_tools(task)
 
     start_time = time.time()
+    task_timeout = task_timeout_seconds()
     usage = {"input_tokens": 0, "output_tokens": 0,
              "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0}
 
     for turn in range(1, max_turns + 1):
+        elapsed_so_far = time.time() - start_time
+        if elapsed_so_far >= task_timeout:
+            error = f"[TIMEOUT] Task exceeded {task_timeout:.0f}s wall-clock budget before turn {turn}"
+            if verbose:
+                print(f"  {error}")
+            break
         try:
             response = client.create(
                 model=MODEL,
@@ -649,6 +670,11 @@ def run_benchmark(
             result = run_task(task, verbose=verbose)
             results_by_index[i] = result
             _write_result(raw_dir, result)
+            if progress_callback:
+                try:
+                    progress_callback(i + 1, total, None)
+                except Exception:
+                    pass
     else:
         # Submit all selected tasks at once, but store results by original index
         # so downstream reports remain deterministic regardless of finish order.
@@ -662,15 +688,15 @@ def run_benchmark(
             done = 0
             for future in as_completed(future_to_task):
                 i, task = future_to_task[future]
+                result = future.result()
+                results_by_index[i] = result
+                _write_result(raw_dir, result)
+                done += 1
                 if progress_callback:
                     try:
                         progress_callback(done, total, task["id"])
                     except Exception:
                         pass
-                result = future.result()
-                results_by_index[i] = result
-                _write_result(raw_dir, result)
-                done += 1
                 if verbose:
                     status = "error" if result.get("error") else "done"
                     print(f"  [{done}/{total}] {task['id']} {status}")

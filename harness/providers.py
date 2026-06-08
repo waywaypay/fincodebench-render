@@ -15,6 +15,19 @@ import json
 import os
 from dataclasses import dataclass, field
 
+
+def request_timeout_seconds() -> float:
+    """Bound individual provider HTTP requests so one stalled model turn cannot
+    leave an entire benchmark run stuck forever. Override with
+    FINCODEBENCH_REQUEST_TIMEOUT_SECONDS; defaults to 180 seconds.
+    """
+    raw = os.environ.get("FINCODEBENCH_REQUEST_TIMEOUT_SECONDS", "180").strip()
+    try:
+        timeout = float(raw)
+    except (TypeError, ValueError):
+        return 180.0
+    return timeout if timeout > 0 else 180.0
+
 # ── Provider registry ─────────────────────────────────────────────────────────
 # kind:    "anthropic" (native SDK) or "openai" (OpenAI-compatible /chat/completions)
 # base_url: API root for OpenAI-compatible providers (None for native Anthropic)
@@ -300,12 +313,13 @@ class ChatClient:
         self.kind = cfg["kind"]
         self._cfg = cfg
         api_key = api_key or "placeholder"  # construction is offline; calls will fail loudly
+        timeout = request_timeout_seconds()
         if self.kind == "anthropic":
             import anthropic
-            self._client = anthropic.Anthropic(api_key=api_key)
+            self._client = anthropic.Anthropic(api_key=api_key, timeout=timeout)
         else:
             from openai import OpenAI
-            self._client = OpenAI(api_key=api_key, base_url=base_url or cfg["base_url"])
+            self._client = OpenAI(api_key=api_key, base_url=base_url or cfg["base_url"], timeout=timeout)
 
     # -- public API --
     def create(self, model, max_tokens, messages, tools=None, system=None):
