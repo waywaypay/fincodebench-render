@@ -48,6 +48,7 @@ def test_run_benchmark_concurrency_preserves_task_order_and_saves_raw(tmp_path, 
     assert (results_dir / "raw" / "slow.json").exists()
     assert (results_dir / "raw" / "fast.json").exists()
     assert (results_dir / "raw" / "medium.json").exists()
+    assert [p[0] for p in progress] == [1, 2, 3, 3]
     assert progress[-1] == (3, 3, None)
 
 

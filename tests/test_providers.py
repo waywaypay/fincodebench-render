@@ -14,6 +14,20 @@ TOOLS = [{
 }]
 
 
+def test_request_timeout_env_parsing(monkeypatch):
+    monkeypatch.delenv("FINCODEBENCH_REQUEST_TIMEOUT_SECONDS", raising=False)
+    assert providers.request_timeout_seconds() == 180.0
+
+    monkeypatch.setenv("FINCODEBENCH_REQUEST_TIMEOUT_SECONDS", "45")
+    assert providers.request_timeout_seconds() == 45.0
+
+    monkeypatch.setenv("FINCODEBENCH_REQUEST_TIMEOUT_SECONDS", "0")
+    assert providers.request_timeout_seconds() == 180.0
+
+    monkeypatch.setenv("FINCODEBENCH_REQUEST_TIMEOUT_SECONDS", "bad")
+    assert providers.request_timeout_seconds() == 180.0
+
+
 def test_registry_and_resolution():
     names = [p["name"] for p in providers.public_registry()]
     assert names == ["anthropic", "openai", "openrouter", "deepseek", "qwen", "kimi", "venice"]
