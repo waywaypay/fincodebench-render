@@ -166,6 +166,29 @@ def test_run_without_label_is_none(client):
     assert client.get(f"/runs/{run_id}").json()["label"] is None
 
 
+def test_run_concurrency_round_trips(client):
+    r = client.post(
+        "/runs",
+        headers={"X-Provider-Api-Key": "sk-test"},
+        json={"provider": "openai", "task_ids": ["codegen-001"], "concurrency": 2},
+    )
+    assert r.status_code == 202, r.text
+    body = r.json()
+    assert body["concurrency"] == 2
+    g = client.get(f"/runs/{body['run_id']}").json()
+    assert g["concurrency"] == 2
+
+
+def test_run_rejects_invalid_concurrency(client):
+    r = client.post(
+        "/runs",
+        headers={"X-Provider-Api-Key": "sk-test"},
+        json={"provider": "openai", "task_ids": ["codegen-001"], "concurrency": 0},
+    )
+    assert r.status_code == 400
+    assert "concurrency" in r.json()["detail"]
+
+
 def test_llm_judge_run_scores(client):
     r = client.post(
         "/runs",
