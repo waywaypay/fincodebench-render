@@ -270,3 +270,69 @@ def test_anthropic_system_passthrough():
     c._client = SimpleNamespace(messages=SimpleNamespace(create=fake_create))
     c.create("claude-sonnet-4-5", 400, [{"role": "user", "content": "grade"}], system="You are a judge")
     assert captured[0]["system"] == "You are a judge" and "tools" not in captured[0]
+
+
+def test_openai_requests_explicit_tool_choice_auto_and_extra_body():
+    captured = []
+
+    def fake_create(**kwargs):
+        captured.append(kwargs)
+        msg = SimpleNamespace(content="ok", tool_calls=None)
+        return SimpleNamespace(choices=[SimpleNamespace(message=msg, finish_reason="stop")])
+
+    c = providers.ChatClient("venice", "k")
+    c._client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=fake_create)))
+    c.create("llama-3.3-70b", 100, [{"role": "user", "content": "hi"}], tools=TOOLS)
+
+    assert captured[0]["tool_choice"] == "auto"
+    assert captured[0]["extra_body"] == providers.PROVIDERS["venice"]["extra_body"]
+    vp = captured[0]["extra_body"]["venice_parameters"]
+    assert vp["include_venice_system_prompt"] is False
+
+
+def test_list_models_filters_explicitly_tool_incapable_models():
+    captured = {}
+
+    def fake_list(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(data=[
+            SimpleNamespace(
+                id="tool-model",
+                model_spec=SimpleNamespace(
+                    capabilities=SimpleNamespace(supportsFunctionCalling=True)
+                ),
+            ),
+            SimpleNamespace(
+                id="text-only-model",
+                model_spec=SimpleNamespace(
+                    capabilities=SimpleNamespace(supportsFunctionCalling=False)
+                ),
+            ),
+            SimpleNamespace(id="unknown-capability-model"),
+        ])
+
+    c = providers.ChatClient("venice", "k")
+    c._client = SimpleNamespace(models=SimpleNamespace(list=fake_list))
+    assert c.list_models() == ["tool-model", "unknown-capability-model"]
+    assert captured.get("extra_query") == {"type": "text"}
+
+
+def test_openai_tool_choice_rejected_retry_keeps_tools():
+    calls = []
+
+    def fake_create(**kwargs):
+        calls.append(dict(kwargs))
+        if "tool_choice" in kwargs:
+            raise Exception("Unsupported parameter: tool_choice")
+        msg = SimpleNamespace(content="ok", tool_calls=None)
+        return SimpleNamespace(choices=[SimpleNamespace(message=msg, finish_reason="stop")])
+
+    c = providers.ChatClient("openai", "k")
+    c._client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=fake_create)))
+    r = c.create("gpt-4o-mini", 100, [{"role": "user", "content": "hi"}], tools=TOOLS)
+
+    assert r.text == "ok"
+    assert len(calls) == 2
+    assert "tool_choice" in calls[0]
+    assert "tool_choice" not in calls[1]
+    assert "tools" in calls[1]

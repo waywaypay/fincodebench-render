@@ -49,6 +49,57 @@ def _scale_of(method: str) -> str:
     return "unknown"
 
 
+def task_expects_tool_use(task: dict) -> bool:
+    """Return whether a task selection should exercise the tool loop.
+
+    Functional tasks are explicitly prompted to self-test with execute_python,
+    and tasks with tools_data hide required evidence behind file/filing/search
+    tools. A provider/model that records zero tool_result blocks for a selection
+    containing these tasks likely ignored function calling entirely.
+    """
+    return task.get("scoring_type") == "functional" or bool(task.get("tools_data"))
+
+
+def count_tool_results(results: list) -> int:
+    return sum(
+        1
+        for result in results
+        for turn in result.get("trajectory", [])
+        for block in turn.get("blocks", [])
+        if block.get("type") == "tool_result"
+    )
+
+
+def ensure_tools_actually_ran(
+    results: list, tasks: dict, provider: str | None = None, model: str | None = None
+) -> None:
+    """Fail fast for provider/model runs that never execute tools.
+
+    Without this guard, text-only responses from a provider that ignored tools can
+    continue into scoring and look like a legitimate completed 0% benchmark run.
+    The check is intentionally run-level rather than per-task: capable models may
+    occasionally solve a functional task without self-testing, but a whole
+    selected run with zero tool executions indicates a broken tool loop.
+    """
+    tool_expected = [
+        r.get("task_id")
+        for r in results
+        if task_expects_tool_use(tasks.get(r.get("task_id"), {}))
+    ]
+    if not tool_expected or count_tool_results(results) > 0:
+        return
+
+    sample = ", ".join(tool_expected[:5])
+    more = f" (+{len(tool_expected) - 5} more)" if len(tool_expected) > 5 else ""
+    target = f" on {provider}/{model}" if provider and model else ""
+    raise RuntimeError(
+        f"No tool executions were recorded for {len(tool_expected)} task(s) that expect tools "
+        f"({sample}{more}){target}. This usually means the selected model or provider "
+        "ignored function/tool calling, so the run would be a misleading all-zero "
+        "'completed' result. Choose a tool/function-calling-capable model and retry."
+    )
+
+
 def load_tasks() -> dict:
     with open(TASKS_FILE) as f:
         return {t["id"]: t for t in json.load(f)}
@@ -78,6 +129,9 @@ def run_full_eval(
         categories=categories,
         verbose=verbose
     )
+    provider = results[0].get("provider") if results else None
+    model = results[0].get("model") if results else None
+    ensure_tools_actually_ran(results, tasks, provider, model)
 
     # Step 2: Score deterministic tasks
     print("\n" + "="*60)
