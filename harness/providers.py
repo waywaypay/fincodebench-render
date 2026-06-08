@@ -26,6 +26,12 @@ from dataclasses import dataclass, field
 #           dashboard can load the full live catalogue even before a key is entered
 # models_query: optional query params forwarded to /models (e.g. {"type": "text"}
 #           to keep Venice's listing to chat-capable models, not image/tts/etc.)
+# require_tool_capable_models: when a public catalogue exposes capabilities, drop
+#           models that cannot emit function/tool calls; every benchmark run
+#           includes tool-enabled tasks, so offering incapable models creates
+#           misleading all-zero "completed" runs.
+# extra_body: provider-specific Chat Completions payload fields forwarded through
+#           the OpenAI SDK (e.g. Venice venice_parameters).
 PROVIDERS = {
     "anthropic": {
         "label": "Anthropic",
@@ -131,8 +137,21 @@ PROVIDERS = {
         # to the static list below.
         "public_models": True,
         # Venice's /models can return image/tts/embedding/… models too; pin the
-        # listing to text so the dropdown only offers chat-capable models.
+        # listing to text and then filter by supportsFunctionCalling so the
+        # dropdown only offers models that can actually drive benchmark tools.
         "models_query": {"type": "text"},
+        "require_tool_capable_models": True,
+        # Venice injects a default Venice character/system prompt unless this is
+        # disabled. That prompt is helpful in chat but can steer models away from
+        # OpenAI-style function calls, producing fast all-text/all-zero runs.
+        "extra_body": {
+            "venice_parameters": {
+                "include_venice_system_prompt": False,
+                "enable_web_search": "off",
+                "enable_web_scraping": False,
+                "enable_web_citations": False,
+            }
+        },
         "default_model": "llama-3.3-70b",
         "default_judge_model": "deepseek-v3.2",
         # Venice's catalogue is large and rotates often — these are current
@@ -149,7 +168,6 @@ PROVIDERS = {
             "venice-uncensored-1-2",
             "claude-sonnet-4-6",
             "kimi-k2-6",
-            "hermes-3-llama-3.1-405b",
         ],
         "docs": "https://venice.ai/settings/api",
     },
@@ -238,6 +256,32 @@ def _openai_usage(resp):
     )
 
 
+def _get_nested(obj, *keys):
+    """Read nested attributes/keys from SDK objects or dictionaries."""
+    cur = obj
+    for key in keys:
+        if cur is None:
+            return None
+        if isinstance(cur, dict):
+            cur = cur.get(key)
+        else:
+            cur = getattr(cur, key, None)
+    return cur
+
+
+def _model_supports_tools(model_obj) -> bool:
+    """Return True unless a provider explicitly says function calling is false.
+
+    Public catalogues differ in shape: Venice nests capabilities under
+    model_spec.capabilities, while other OpenAI-compatible APIs may expose flat
+    dicts or SDK objects. Treat missing metadata as allowed so providers without
+    capability flags don't accidentally hide every model.
+    """
+    flag = _get_nested(model_obj, "model_spec", "capabilities", "supportsFunctionCalling")
+    if flag is None:
+        flag = _get_nested(model_obj, "capabilities", "supportsFunctionCalling")
+    return flag is not False
+
 # ── Unified client ────────────────────────────────────────────────────────────
 class ChatClient:
     """One tool-calling interface over Anthropic and OpenAI-compatible APIs.
@@ -274,7 +318,13 @@ class ChatClient:
         """Live list of model ids the caller's key can use, sorted. Both the
         Anthropic and OpenAI SDKs expose client.models.list() with `.id` on each
         item. Raises on auth/network errors so callers can fall back to the
-        static `models` suggestions in the registry."""
+        static `models` suggestions in the registry.
+
+        Providers that publish capability metadata can opt into a tool-calling
+        filter. FinCodeBench tasks rely on function tools, so surfacing models
+        that cannot call tools leads to misleading runs where every task gets a
+        text-only answer and scores zero.
+        """
         # Some providers expose typed catalogues (e.g. Venice's text/image/tts);
         # forward the provider's models_query so we only list chat-capable models.
         query = self._cfg.get("models_query")
@@ -287,8 +337,11 @@ class ChatClient:
             mid = getattr(m, "id", None)
             if mid is None and isinstance(m, dict):
                 mid = m.get("id")
-            if mid:
-                ids.append(mid)
+            if not mid:
+                continue
+            if self._cfg.get("require_tool_capable_models") and not _model_supports_tools(m):
+                continue
+            ids.append(mid)
         return sorted(ids)
 
     # -- Anthropic path --
@@ -376,21 +429,46 @@ class ChatClient:
                     })
 
         kwargs = {"model": model, "max_tokens": max_tokens, "messages": native}
+        extra_body = self._cfg.get("extra_body")
+        if extra_body:
+            kwargs["extra_body"] = extra_body
         if tools:
             kwargs["tools"] = self._openai_tools(tools)
+            # Be explicit across OpenAI-compatible providers. Some gateways treat
+            # the default as text-only even when tools are present, which makes
+            # the model narrate work instead of emitting function calls.
+            kwargs["tool_choice"] = "auto"
 
-        try:
-            resp = self._client.chat.completions.create(**kwargs)
-        except Exception as e:
-            # Reasoning models (OpenAI o-series, gpt-5) reject the deprecated
-            # max_tokens and require max_completion_tokens. Retry once.
-            msg = str(e)
-            if "max_completion_tokens" in msg and "max_tokens" in msg:
-                kwargs.pop("max_tokens", None)
-                kwargs["max_completion_tokens"] = max_tokens
+        while True:
+            try:
                 resp = self._client.chat.completions.create(**kwargs)
-            else:
-                raise
+                break
+            except Exception as e:
+                # OpenAI-compatible providers are not perfectly uniform. Retry
+                # only when the provider explicitly rejects an optional parameter
+                # we added for compatibility; otherwise surface the real error.
+                msg = str(e)
+                changed = False
+                # Reasoning models (OpenAI o-series, gpt-5) reject the deprecated
+                # max_tokens and require max_completion_tokens.
+                if "max_completion_tokens" in msg and "max_tokens" in msg and "max_tokens" in kwargs:
+                    kwargs.pop("max_tokens", None)
+                    kwargs["max_completion_tokens"] = max_tokens
+                    changed = True
+                # Some OpenAI-compatible gateways accept tools but not an explicit
+                # tool_choice. Dropping it preserves tool definitions while avoiding
+                # a hard provider failure.
+                elif "tool_choice" in msg and "tool_choice" in kwargs:
+                    kwargs.pop("tool_choice", None)
+                    changed = True
+                # Provider-specific extras are best-effort: if a gateway rejects
+                # the pass-through payload shape, retry the plain OpenAI request.
+                elif ("extra_body" in msg or "venice_parameters" in msg) and "extra_body" in kwargs:
+                    kwargs.pop("extra_body", None)
+                    changed = True
+
+                if not changed:
+                    raise
 
         choice = resp.choices[0]
         msg = choice.message

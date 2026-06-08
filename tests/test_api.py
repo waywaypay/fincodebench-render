@@ -229,3 +229,25 @@ def test_module_globals_restored_after_run(client):
     # background task already ran inline; globals must be back to import-time values
     assert (runner.PROVIDER, runner.MODEL, judge.JUDGE_MODEL) == before
     assert runner.PROVIDER == "anthropic"
+
+
+def test_tool_required_run_fails_if_no_tools_execute(monkeypatch):
+    class TextOnlyClient(FakeClient):
+        def create(self, model, max_tokens, messages, tools=None, system=None):
+            if system and not tools:
+                return providers.ChatResponse('{"score": 1, "reasoning": "bad", "key_issues": []}', [], "end_turn")
+            return providers.ChatResponse("I ran it mentally.", [], "end_turn")
+
+    monkeypatch.setattr(providers, "ChatClient", TextOnlyClient)
+    c = TestClient(api.app, raise_server_exceptions=False)
+    r = c.post(
+        "/runs",
+        headers={"X-Provider-Api-Key": "sk-test"},
+        json={"provider": "venice", "task_ids": ["codegen-001"]},
+    )
+    assert r.status_code == 202, r.text
+    run_id = r.json()["run_id"]
+    g = c.get(f"/runs/{run_id}").json()
+    assert g["status"] == "failed"
+    assert "No tool executions were recorded" in g["error"]
+    assert "venice" in g["error"]

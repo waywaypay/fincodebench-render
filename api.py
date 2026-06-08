@@ -301,7 +301,7 @@ def _execute_run(run_id: str, task_ids: Optional[list], categories: Optional[lis
     from runner import run_benchmark
     from scorer import score_task
     from judge import score_pending_judge_tasks
-    from eval import generate_report
+    from eval import generate_report, ensure_tools_actually_ran
 
     run_dir = RESULTS_DIR / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -360,6 +360,7 @@ def _execute_run(run_id: str, task_ids: Optional[list], categories: Optional[lis
             verbose=False,
             progress_callback=_progress("running"),
         )
+        ensure_tools_actually_ran(results, tasks_map, provider, model)
 
         # Score deterministic
         _progress("scoring")(len(results), len(results), None)

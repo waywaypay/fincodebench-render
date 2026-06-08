@@ -81,3 +81,21 @@ def test_functional_failure_breakdown_is_aggregated():
 def test_report_carries_benchmark_version():
     rep = e.generate_report([], {})
     assert rep["benchmark_version"] == e.BENCHMARK_VERSION
+
+
+def test_tool_loop_guard_is_shared_by_cli_eval():
+    tasks = {"codegen-1": {"id": "codegen-1", "scoring_type": "functional"}}
+    results = [{"task_id": "codegen-1", "trajectory": [{"blocks": [{"type": "text", "text": "no tools"}]}]}]
+    try:
+        e.ensure_tools_actually_ran(results, tasks, "venice", "text-only")
+    except RuntimeError as err:
+        assert "No tool executions were recorded" in str(err)
+        assert "venice/text-only" in str(err)
+    else:
+        raise AssertionError("expected RuntimeError")
+
+
+def test_tool_loop_guard_allows_toolless_non_tool_tasks():
+    tasks = {"extract-1": {"id": "extract-1", "scoring_type": "exact_json"}}
+    results = [{"task_id": "extract-1", "trajectory": [{"blocks": [{"type": "text", "text": "{}"}]}]}]
+    e.ensure_tools_actually_ran(results, tasks)
