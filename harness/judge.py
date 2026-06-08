@@ -168,12 +168,25 @@ def llm_judge(
 
     judge_prompt = "\n\n".join(parts)
 
-    result = client.create(
-        model=JUDGE_MODEL,
-        max_tokens=400,
-        system=JUDGE_SYSTEM,
-        messages=[{"role": "user", "content": judge_prompt}]
-    )
+    try:
+        result = client.create(
+            model=JUDGE_MODEL,
+            max_tokens=400,
+            system=JUDGE_SYSTEM,
+            messages=[{"role": "user", "content": judge_prompt}]
+        )
+    except Exception as e:
+        return {
+            "score": 0,
+            "normalized": 0.0,
+            "method": "llm_judge",
+            "reasoning": f"Judge API error: {str(e)[:200]}",
+            "key_issues": ["api_error"],
+            "raw": None,
+            "judge_model": JUDGE_MODEL,
+            "judge_usage": None,
+            "judge_cost_usd": None,
+        }
 
     # Judge calls cost money too — track usage/cost so the run total includes them
     u = getattr(result, "usage", None)
