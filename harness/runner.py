@@ -662,15 +662,15 @@ def run_benchmark(
             done = 0
             for future in as_completed(future_to_task):
                 i, task = future_to_task[future]
+                result = future.result()
+                results_by_index[i] = result
+                _write_result(raw_dir, result)
+                done += 1
                 if progress_callback:
                     try:
                         progress_callback(done, total, task["id"])
                     except Exception:
                         pass
-                result = future.result()
-                results_by_index[i] = result
-                _write_result(raw_dir, result)
-                done += 1
                 if verbose:
                     status = "error" if result.get("error") else "done"
                     print(f"  [{done}/{total}] {task['id']} {status}")
