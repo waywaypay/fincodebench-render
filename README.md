@@ -69,6 +69,14 @@ cd harness
 python eval.py
 ```
 
+### Run tasks concurrently
+Use `--concurrency` to execute multiple benchmark tasks in parallel. Results are still written in deterministic task order, while each per-task raw JSON file is saved as soon as that task finishes.
+
+```bash
+python eval.py --concurrency 4
+python runner.py --category computation --concurrency 4
+```
+
 ### Run specific category only
 ```bash
 python eval.py --category code_generation
@@ -260,7 +268,7 @@ changes. Comparing models across providers on the same suite is a useful exercis
 curl -X POST <url>/runs \
   -H 'Content-Type: application/json' \
   -H 'X-Provider-Api-Key: <your-key>' \
-  -d '{"provider":"deepseek","model":"deepseek-chat","categories":["computation"]}'
+  -d '{"provider":"deepseek","model":"deepseek-chat","categories":["computation"],"concurrency":4}'
 
 # Optionally tag a run with a label to tell it apart from others (e.g. compare
 # providers, or re-runs on different dates). The label shows in the runs table.

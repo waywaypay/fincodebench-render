@@ -498,6 +498,7 @@
       <input id="runModel" list="modelList" placeholder="Model (provider default)">
       <datalist id="modelList"></datalist>
       <input id="runLabel" placeholder="Label (optional, e.g. baseline)" title="A free-text tag to delineate this run in the table">
+      <input id="runConcurrency" type="number" min="1" max="32" value="1" title="Number of tasks to run concurrently" style="width:90px" aria-label="Concurrency">
       <input id="runKey" type="password" placeholder="Your API key">
       <button class="btn ghost" id="loadModelsBtn" type="button" title="Fetch this provider's full model list using your key">↻ Models</button>
       <button class="btn" id="runBtn">Run</button>
@@ -727,6 +728,8 @@ async function submitRun(f){
   if(prov) payload.provider=prov.name;
   if(model) payload.model=model;
   const label=f.label?f.label.value.trim():''; if(label) payload.label=label;
+  const concurrency=f.concurrency?parseInt(f.concurrency.value,10):1;
+  if(Number.isFinite(concurrency)&&concurrency>1) payload.concurrency=concurrency;
   btn.disabled=true; st.textContent='Submitting…';
   try{
     const headers={'Content-Type':'application/json','X-Provider-Api-Key':key};
@@ -744,6 +747,7 @@ function setupGlobalForm(){
   const f={
     provider:$('#runProvider'), scope:$('#runScope'), task:$('#runTask'),
     model:$('#runModel'), modelList:$('#modelList'), key:$('#runKey'), label:$('#runLabel'),
+    concurrency:$('#runConcurrency'),
     loadBtn:$('#loadModelsBtn'), runBtn:$('#runBtn'), note:$('#modelNote'),
     status:$('#runStatus'), docs:$('#provDocs'), lockedCategory:null, onCompleted:null,
   };
@@ -769,6 +773,7 @@ function buildTriggerForm({lockedCategory=null,onCompleted=null}={}){
        <input class="runModel" placeholder="Model (provider default)" style="flex:1">
        <datalist></datalist>
        <input class="runLabel" placeholder="Label (optional, e.g. baseline)" title="A free-text tag to delineate this run in the table">
+       <input class="runConcurrency" type="number" min="1" max="32" value="1" title="Number of tasks to run concurrently" style="width:90px" aria-label="Concurrency">
        <input class="runKey" type="password" placeholder="Your API key">
        <button class="btn ghost loadModelsBtn" type="button" title="Fetch this provider's full model list using your key">↻ Models</button>
        <button class="btn runBtn">Run</button>
@@ -780,6 +785,7 @@ function buildTriggerForm({lockedCategory=null,onCompleted=null}={}){
   const f={
     root, provider:root.querySelector('.runProvider'), scope:null, task:null,
     model, modelList:dl, key:root.querySelector('.runKey'), label:root.querySelector('.runLabel'),
+    concurrency:root.querySelector('.runConcurrency'),
     loadBtn:root.querySelector('.loadModelsBtn'), runBtn:root.querySelector('.runBtn'),
     note:root.querySelector('.modelNote'), status:root.querySelector('.runStatus'),
     docs:root.querySelector('.provDocs'), lockedCategory, onCompleted,

@@ -295,7 +295,8 @@ registry_lock = threading.Lock()
 
 # ── Run execution (background thread) ─────────────────────────────────────────
 def _execute_run(run_id: str, task_ids: Optional[list], categories: Optional[list],
-                 provider: str, api_key: str, model: str, judge_model: str):
+                 provider: str, api_key: str, model: str, judge_model: str,
+                 concurrency: int = 1):
     """Runs the full eval pipeline in a background thread on the visitor's own
     provider + key (bring-your-own-key). Updates registry on completion."""
     from runner import run_benchmark
@@ -359,6 +360,7 @@ def _execute_run(run_id: str, task_ids: Optional[list], categories: Optional[lis
             categories=categories,
             verbose=False,
             progress_callback=_progress("running"),
+            concurrency=concurrency,
         )
         ensure_tools_actually_ran(results, tasks_map, provider, model)
 
@@ -451,12 +453,19 @@ class RunRequest(BaseModel):
     model: Optional[str] = None         # runner model override (defaults to provider's)
     judge_model: Optional[str] = None   # judge model override (defaults to provider's)
     label: Optional[str] = None         # optional human-friendly tag to delineate this run (e.g. "baseline", "kimi-vs-opus")
+    concurrency: int = 1                # number of benchmark tasks to execute in parallel
 
     def validate_categories(self):
         if self.categories:
             invalid = set(self.categories) - VALID_CATEGORIES
             if invalid:
                 raise HTTPException(400, f"Invalid categories: {invalid}. Valid: {VALID_CATEGORIES}")
+
+    def validate_concurrency(self):
+        if self.concurrency < 1:
+            raise HTTPException(400, "concurrency must be at least 1")
+        if self.concurrency > 32:
+            raise HTTPException(400, "concurrency must be 32 or less")
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -605,6 +614,7 @@ def create_run(
                    f"send it in the X-Provider-Api-Key header.",
         )
     req.validate_categories()
+    req.validate_concurrency()
 
     model = (req.model or "").strip() or cfg["default_model"]
     judge_model = (req.judge_model or "").strip() or cfg["default_judge_model"]
@@ -629,6 +639,7 @@ def create_run(
             "model": model,
             "judge_model": judge_model,
             "label": label,
+            "concurrency": req.concurrency,
         }
         _save_registry(reg)
 
@@ -642,6 +653,7 @@ def create_run(
         api_key=api_key,
         model=model,
         judge_model=judge_model,
+        concurrency=req.concurrency,
     )
 
     return {
@@ -649,6 +661,7 @@ def create_run(
         "status": "queued",
         "provider": provider,
         "model": model,
+        "concurrency": req.concurrency,
         "poll_url": f"/runs/{run_id}"
     }
 

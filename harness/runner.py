@@ -9,6 +9,7 @@ import shutil
 import subprocess
 import tempfile
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Callable
@@ -592,11 +593,27 @@ def run_task(task: dict, verbose: bool = True) -> dict:
 
 
 # ── Batch runner ──────────────────────────────────────────────────────────────
+def _write_result(raw_dir: Path, result: dict) -> None:
+    """Persist one task result to results/raw/ as soon as it finishes."""
+    out_path = raw_dir / f"{result['task_id']}.json"
+    with open(out_path, 'w') as f:
+        json.dump(result, f, indent=2)
+
+
+def _coerce_concurrency(concurrency: Optional[int]) -> int:
+    """Normalize user-provided worker counts to a safe positive integer."""
+    try:
+        return max(1, int(concurrency or 1))
+    except (TypeError, ValueError):
+        return 1
+
+
 def run_benchmark(
     task_ids: Optional[list] = None,
     categories: Optional[list] = None,
     verbose: bool = True,
-    progress_callback: Optional[Callable] = None
+    progress_callback: Optional[Callable] = None,
+    concurrency: int = 1
 ) -> list:
     """
     Run all (or filtered) tasks, save raw results to results/raw/.
@@ -611,32 +628,60 @@ def run_benchmark(
     if categories:
         tasks = [t for t in tasks if t["category"] in categories]
 
-    print(f"\nRunning {len(tasks)} tasks on {PROVIDER} / {MODEL}")
+    concurrency = _coerce_concurrency(concurrency)
+    worker_count = min(concurrency, len(tasks)) if tasks else 1
+
+    print(f"\nRunning {len(tasks)} tasks on {PROVIDER} / {MODEL} (concurrency={worker_count})")
 
     raw_dir = RESULTS_DIR / "raw"
     raw_dir.mkdir(parents=True, exist_ok=True)
 
-    results = []
+    results_by_index: list[Optional[dict]] = [None] * len(tasks)
     total = len(tasks)
-    for i, task in enumerate(tasks):
-        if progress_callback:
-            try:
-                progress_callback(i, total, task["id"])
-            except Exception:
-                pass
-        result = run_task(task, verbose=verbose)
-        results.append(result)
 
-        # Save immediately — don't lose progress
-        out_path = raw_dir / f"{task['id']}.json"
-        with open(out_path, 'w') as f:
-            json.dump(result, f, indent=2)
+    if worker_count == 1:
+        for i, task in enumerate(tasks):
+            if progress_callback:
+                try:
+                    progress_callback(i, total, task["id"])
+                except Exception:
+                    pass
+            result = run_task(task, verbose=verbose)
+            results_by_index[i] = result
+            _write_result(raw_dir, result)
+    else:
+        # Submit all selected tasks at once, but store results by original index
+        # so downstream reports remain deterministic regardless of finish order.
+        if verbose:
+            print("Concurrent mode: suppressing per-turn task logs to avoid interleaved output.")
+        with ThreadPoolExecutor(max_workers=worker_count) as executor:
+            future_to_task = {
+                executor.submit(run_task, task, False): (i, task)
+                for i, task in enumerate(tasks)
+            }
+            done = 0
+            for future in as_completed(future_to_task):
+                i, task = future_to_task[future]
+                if progress_callback:
+                    try:
+                        progress_callback(done, total, task["id"])
+                    except Exception:
+                        pass
+                result = future.result()
+                results_by_index[i] = result
+                _write_result(raw_dir, result)
+                done += 1
+                if verbose:
+                    status = "error" if result.get("error") else "done"
+                    print(f"  [{done}/{total}] {task['id']} {status}")
 
     if progress_callback:
         try:
             progress_callback(total, total, None)
         except Exception:
             pass
+
+    results = [r for r in results_by_index if r is not None]
 
     # Save full batch
     batch_id = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
@@ -658,12 +703,14 @@ if __name__ == "__main__":
                         choices=["extraction", "code_generation", "computation", "workflow", "agentic", "agentic_real", "debug"],
                         help="Run only specific categories")
     parser.add_argument("--quiet", action="store_true", help="Suppress turn-by-turn output")
+    parser.add_argument("--concurrency", type=int, default=1, help="Number of tasks to run concurrently")
     args = parser.parse_args()
 
     results = run_benchmark(
         task_ids=args.task,
         categories=args.category,
-        verbose=not args.quiet
+        verbose=not args.quiet,
+        concurrency=args.concurrency
     )
     print(f"\n{'='*60}")
     print(f"Completed {len(results)} tasks.")

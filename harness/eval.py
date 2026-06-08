@@ -109,7 +109,8 @@ def run_full_eval(
     task_ids: Optional[list] = None,
     categories: Optional[list] = None,
     skip_judge: bool = False,
-    verbose: bool = True
+    verbose: bool = True,
+    concurrency: int = 1
 ) -> dict:
     """
     Full pipeline:
@@ -127,7 +128,8 @@ def run_full_eval(
     results = run_benchmark(
         task_ids=task_ids,
         categories=categories,
-        verbose=verbose
+        verbose=verbose,
+        concurrency=concurrency
     )
     provider = results[0].get("provider") if results else None
     model = results[0].get("model") if results else None
@@ -392,11 +394,13 @@ if __name__ == "__main__":
                         choices=["extraction", "code_generation", "computation", "workflow", "agentic", "agentic_real", "debug"])
     parser.add_argument("--skip-judge", action="store_true", help="Skip LLM-as-judge step")
     parser.add_argument("--quiet", action="store_true")
+    parser.add_argument("--concurrency", type=int, default=1, help="Number of tasks to run concurrently")
     args = parser.parse_args()
 
     run_full_eval(
         task_ids=args.task,
         categories=args.category,
         skip_judge=args.skip_judge,
-        verbose=not args.quiet
+        verbose=not args.quiet,
+        concurrency=args.concurrency
     )
